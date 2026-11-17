@@ -20,6 +20,8 @@ The host deliberately returns false for unsupported libretro environment extensi
 
 Core source is fetched at exact commits and built with the iOS SDK, then each dylib is placed in its own framework with a bundle ID and install name. Xcode embeds and signs each framework. The bundle validation script checks that all required engines, licences and the privacy manifest are present, and checks signatures for the TestFlight archive. No core can be downloaded after installation.
 
+The N64 recipe skips submodules because its disabled native RSP backend contains a gnulib gitlink without a submodule URL. The selected interpreter/HLE sources are tracked in the main repository. PC Engine and N64 carry a small zlib header patch that limits the classic Mac `fdopen` fallback to non-Apple targets, preserving the real iOS SDK declaration.
+
 ## Validation
 
 - `Tests/main.swift`: system recognition, support-file exclusions, path traversal rejection, stable IDs on rescan and profile persistence/isolation.

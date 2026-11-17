@@ -1,9 +1,18 @@
 import importlib.util, json, pathlib, unittest
+from unittest.mock import patch
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('build_core',ROOT/'ci/build_core.py')
 build=importlib.util.module_from_spec(spec);spec.loader.exec_module(build)
 CORES={core['name']:core for core in json.loads((ROOT/'ci/cores.json').read_text())}
 class CoreBuildTests(unittest.TestCase):
+    def test_n64_skips_unused_broken_submodule(self):
+        with patch.object(build, 'run') as run:
+            build.update_submodules(CORES['mupen64plus_next'], pathlib.Path('/core'))
+            run.assert_not_called()
+    def test_other_cores_still_fetch_required_submodules(self):
+        with patch.object(build, 'run') as run:
+            build.update_submodules(CORES['mednafen_pce_fast'], pathlib.Path('/core'))
+            run.assert_called_once_with('git','-C','/core','submodule','update','--init','--recursive','--depth','1')
     def test_mame_c_backend_cannot_be_removed(self):
         core=dict(CORES['mamearcade']); core['make_args']=['TARGET=mame','SUBTARGET=arcade']
         with self.assertRaises(ValueError): build.build_command(core,'/sdk',4)

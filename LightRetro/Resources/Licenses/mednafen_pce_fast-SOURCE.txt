@@ -2,4 +2,6 @@ mednafen_pce_fast
 GPL-2.0-or-later and component licences
 Exact corresponding source:
 https://github.com/libretro/beetle-pce-fast-libretro/tree/2de1ce1c3f237b161c126c54ba407990bb86d1e9
-Build recipe: ci/build_core.py
+Light Retro patches (part of corresponding source):
+ci/patches/pce-zlib-apple.patch
+Build recipe: ci/build_core.py and ci/cores.json

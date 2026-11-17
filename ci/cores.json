@@ -29,7 +29,8 @@
     "commit": "2de1ce1c3f237b161c126c54ba407990bb86d1e9",
     "directory": ".",
     "makefile": "Makefile",
-    "license": "GPL-2.0-or-later and component licences"
+    "license": "GPL-2.0-or-later and component licences",
+    "patches": ["ci/patches/pce-zlib-apple.patch"]
   },
   {
     "name": "fbneo",
@@ -62,9 +63,11 @@
     "name": "mupen64plus_next",
     "repo": "https://github.com/libretro/mupen64plus-libretro-nx.git",
     "commit": "15bada85906593376e8fd697f1b0b3af3a20f512",
+    "submodules": false,
     "directory": ".",
     "makefile": "Makefile",
     "license": "GPL-2.0-or-later and component licences",
+    "patches": ["ci/patches/n64-zlib-apple.patch"],
     "make_args": [
       "WITH_DYNAREC=",
       "HAVE_PARALLEL_RSP=0",

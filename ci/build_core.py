@@ -5,6 +5,12 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 MIN_IOS = '17.0'
 def run(*args, cwd=None): subprocess.run(args, cwd=cwd, check=True)
 
+def update_submodules(core, src):
+    # N64's unused native RSP backend contains an orphan gnulib gitlink.
+    # Its interpreter/HLE build uses only files in the pinned main repository.
+    if core.get('submodules', True):
+        run('git','-C',str(src),'submodule','update','--init','--recursive','--depth','1')
+
 def build_command(core, sdk, cpu_count):
     args=['make','-f',core['makefile'],'-j',str(min(cpu_count or 2,core.get('jobs',4))), 'platform=ios-arm64']
     target=f'-target arm64-apple-ios{MIN_IOS} -isysroot {shlex.quote(sdk)}'
@@ -34,7 +40,7 @@ def main(name):
     if not (src/'.git').exists(): run('git','init',str(src))
     run('git','-C',str(src),'fetch','--depth','1',core['repo'],core['commit'])
     run('git','-C',str(src),'checkout','--detach','FETCH_HEAD')
-    run('git','-C',str(src),'submodule','update','--init','--recursive','--depth','1')
+    update_submodules(core, src)
     assert subprocess.check_output(['git','-C',str(src),'rev-parse','HEAD'],text=True).strip()==core['commit']
     for patch in core.get('patches',[]):
         patch_path=str(ROOT/patch)
