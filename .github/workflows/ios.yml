@@ -63,12 +63,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash ci/select_xcode.sh
+      - name: Identify engine build cache
+        id: recipe
+        run: python3 ci/core_cache_key.py '${{ matrix.core }}' >> "$GITHUB_OUTPUT"
       - name: Restore compiled core
         id: cache
         uses: actions/cache@v4
         with:
           path: Frameworks/${{ matrix.core }}.framework
-          key: ios26-arm64-v2-${{ matrix.core }}-${{ hashFiles('ci/cores.json', 'ci/build_core.py', 'ci/patches/**') }}
+          key: ${{ steps.recipe.outputs.key }}
       - name: Build pinned source
         if: steps.cache.outputs.cache-hit != 'true'
         run: |

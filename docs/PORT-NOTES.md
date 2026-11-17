@@ -22,6 +22,8 @@ Core source is fetched at exact commits and built with the iOS SDK, then each dy
 
 The N64 recipe skips submodules because its disabled native RSP backend contains a gnulib gitlink without a submodule URL. The selected interpreter/HLE sources are tracked in the main repository. PC Engine and N64 carry a small zlib header patch that limits the classic Mac `fdopen` fallback to non-Apple targets, preserving the real iOS SDK declaration.
 
+N64's bundled libpng likewise selects standard `math.h` on modern Apple platforms instead of the classic Mac `fp.h` header. Engine caches are keyed independently by each engine's pinned manifest entry, patches, shared build recipe and selected Xcode version. The six successful engine builds from run 44146344722 are reused only when those inputs match their recorded fingerprints; an N64-only patch no longer discards the MAME build.
+
 ## Validation
 
 - `Tests/main.swift`: system recognition, support-file exclusions, path traversal rejection, stable IDs on rescan and profile persistence/isolation.

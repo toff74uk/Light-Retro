@@ -67,7 +67,7 @@
     "directory": ".",
     "makefile": "Makefile",
     "license": "GPL-2.0-or-later and component licences",
-    "patches": ["ci/patches/n64-zlib-apple.patch"],
+    "patches": ["ci/patches/n64-zlib-apple.patch", "ci/patches/n64-libpng-apple.patch"],
     "make_args": [
       "WITH_DYNAREC=",
       "HAVE_PARALLEL_RSP=0",

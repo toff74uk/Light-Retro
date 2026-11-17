@@ -4,4 +4,5 @@ Exact upstream source:
 https://github.com/libretro/mupen64plus-libretro-nx/tree/15bada85906593376e8fd697f1b0b3af3a20f512
 Light Retro patches (part of corresponding source):
 ci/patches/n64-zlib-apple.patch
+ci/patches/n64-libpng-apple.patch
 Build recipe: ci/build_core.py and ci/cores.json

@@ -1,0 +1,26 @@
+{
+  "fceumm": {
+    "fingerprint": "041e853f91303be9b7c5a35db38a15c1dc807c07a871afaebfb120a84d60e85b",
+    "key": "ios26-arm64-v2-fceumm-3768877546c879d78b18912df6f57d3671769f31242293b883c10e7b98aca183"
+  },
+  "snes9x": {
+    "fingerprint": "8285583d110479d7f4803bd4f279db535f9a0d38a6dc7adf4ef09e4486947c3e",
+    "key": "ios26-arm64-v2-snes9x-3768877546c879d78b18912df6f57d3671769f31242293b883c10e7b98aca183"
+  },
+  "genesis_plus_gx": {
+    "fingerprint": "3f794ccb2ccf8b387409e5103d358dc2a67d938b72f6e10aaf43d829895497b0",
+    "key": "ios26-arm64-v2-genesis_plus_gx-3768877546c879d78b18912df6f57d3671769f31242293b883c10e7b98aca183"
+  },
+  "mednafen_pce_fast": {
+    "fingerprint": "bd1a2a71c3614310450008bf6e29c004263a5a5c3121f17729ee16fd8d592141",
+    "key": "ios26-arm64-v2-mednafen_pce_fast-3768877546c879d78b18912df6f57d3671769f31242293b883c10e7b98aca183"
+  },
+  "fbneo": {
+    "fingerprint": "52dcde25f16b9a8d0887b1c72e3f60cb000c58340ed7430616f5ee9db1601ab3",
+    "key": "ios26-arm64-v2-fbneo-3768877546c879d78b18912df6f57d3671769f31242293b883c10e7b98aca183"
+  },
+  "mamearcade": {
+    "fingerprint": "b5a8fc78710e9917ad6df2e25d6b1387b4a05f70c2f0509bd7dc8d51dfb17413",
+    "key": "ios26-arm64-v2-mamearcade-3768877546c879d78b18912df6f57d3671769f31242293b883c10e7b98aca183"
+  }
+}
