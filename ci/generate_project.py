@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-import json, os, pathlib, subprocess
+import json, os, pathlib, plistlib, subprocess
+from verify_bundle import validate_build_version
 root=pathlib.Path(__file__).resolve().parents[1]
 spec=(root/'project.yml').read_text()
 if os.environ.get('INCLUDE_CORES')=='1':
@@ -12,5 +13,7 @@ if os.environ.get('INCLUDE_CORES')=='1':
 for key,default in [('BUNDLE_ID','com.lightretro.app'),('TEAM_ID',''),('BUILD_NUMBER','1')]:
     spec=spec.replace('${'+key+'}',os.environ.get(key) or default)
 generated=root/'project.generated.yml'; generated.write_text(spec)
-try: subprocess.run(['xcodegen','generate','--spec',str(generated)],cwd=root,check=True)
+try:
+    subprocess.run(['xcodegen','generate','--spec',str(generated)],cwd=root,check=True)
+    validate_build_version(plistlib.loads((root/'build/Info.plist').read_bytes()), 'Generated app Info.plist')
 finally: generated.unlink(missing_ok=True)
