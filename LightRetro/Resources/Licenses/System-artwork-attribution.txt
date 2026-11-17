@@ -1,0 +1,6 @@
+System logo artwork: Carbon theme by Rookervik, based on simple by Nils Bonenberger.
+Source: https://github.com/RetroPie/es-theme-carbon (retrieved 22 October 2026).
+The upstream licence and trademark notice are included in system-artwork-carbon.txt.
+Changes: SVGs rasterized to transparent PNG at 600px wide. The PC Engine mark is also used for PC Engine CD. These adaptations are shared under the same upstream noncommercial share-alike licence. Original SVG sources accompany the source project in brand-sources/.
+The FinalBurn Neo label is separately typeset for this app; it is not a FinalBurn Alpha logo. Controller placeholder drawings are original app code.
+All console and emulator names and trademarks belong to their respective owners. No affiliation is implied.

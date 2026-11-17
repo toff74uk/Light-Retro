@@ -1,0 +1,33 @@
+--- a/src/devices/cpu/drccache.cpp
++++ b/src/devices/cpu/drccache.cpp
+@@ -179,7 +179,7 @@
+ 	if (m_cache)
+ 		throw emu_fatalerror("drc_cache: Cannot reallocate cache");
+ 
+-	m_cache.emplace({ NEAR_CACHE_SIZE, m_size - NEAR_CACHE_SIZE }, osd::virtual_memory_allocation::READ_WRITE_EXECUTE);
++	m_cache.emplace({ NEAR_CACHE_SIZE, m_size - NEAR_CACHE_SIZE }, osd::virtual_memory_allocation::READ_WRITE);
+ 	m_near = reinterpret_cast<drccodeptr>(m_cache->get());
+ 	m_neartop = m_near;
+ 	m_base = align_ptr_up(m_near + NEAR_CACHE_SIZE, m_cache->page_size());
+@@ -199,15 +199,13 @@
+ 	{
+ 		throw emu_fatalerror("drc_cache: Error marking cache read/write");
+ 	}
+-	else if (rwx && m_cache->set_access(m_base - m_near, m_end - m_base, osd::virtual_memory_allocation::READ_WRITE_EXECUTE))
+-	{
+-		osd_printf_verbose("drc_cache: RWX pages supported\n");
++	else
++	{
++		// Light Retro builds this core with FORCE_DRC_C_BACKEND=1. Its cache
++		// contains interpreted instructions, never native executable code.
++		// m_rwx suppresses W^X transitions; the mapping stays READ_WRITE.
++		(void)rwx;
+ 		m_rwx = true;
+-	}
+-	else
+-	{
+-		osd_printf_verbose("drc_cache: Using W^X mode\n");
+-		m_rwx = false;
+ 	}
+ 
+ 	// page size must be power of two, cache must be page-aligned

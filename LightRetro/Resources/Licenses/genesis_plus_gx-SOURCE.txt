@@ -1,0 +1,5 @@
+genesis_plus_gx
+Genesis Plus GX non-commercial licence and component licences
+Exact corresponding source:
+https://github.com/libretro/Genesis-Plus-GX/tree/b9c2316441978d4015ba30e9a95d9b0e6f8ee981
+Build recipe: ci/build_core.py

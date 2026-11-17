@@ -1,0 +1,5 @@
+snes9x
+Snes9x non-commercial licence
+Exact corresponding source:
+https://github.com/libretro/snes9x/tree/204ea1c0b851f960cbf223075eb1c25641cb483c
+Build recipe: ci/build_core.py

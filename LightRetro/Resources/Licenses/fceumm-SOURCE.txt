@@ -1,0 +1,5 @@
+fceumm
+GPL-2.0-or-later
+Exact corresponding source:
+https://github.com/libretro/libretro-fceumm/tree/77468e568d9fe9c48d684ca911f1a3fe7259fdf7
+Build recipe: ci/build_core.py

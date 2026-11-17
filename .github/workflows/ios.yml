@@ -1,0 +1,172 @@
+name: Build iPhone app
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      testflight:
+        description: Sign and upload to TestFlight
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    name: Native app compile and regression tests
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash ci/select_xcode.sh
+      - name: Regression tests
+        run: |
+          swiftc LightRetro/Core/Models.swift Tests/main.swift -o "$RUNNER_TEMP/library-tests"
+          "$RUNNER_TEMP/library-tests"
+          clang++ -std=c++17 -Wall -Wextra Tests/frame_audio.cpp -o "$RUNNER_TEMP/frame-audio-tests"
+          "$RUNNER_TEMP/frame-audio-tests"
+          clang++ -std=c++17 -Wall -Wextra Tests/analog_input.cpp -o "$RUNNER_TEMP/analog-tests"
+          "$RUNNER_TEMP/analog-tests"
+          python3 -m unittest discover -s Tests -p 'test_*.py'
+      - run: brew install xcodegen
+      - run: python3 ci/generate_project.py
+      - name: Compile for iPhone
+        run: |
+          xcodebuild build -project LightRetro.xcodeproj -scheme LightRetro -configuration Release \
+            -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO \
+            > build.log 2>&1 || { grep -E 'error:' build.log | sort -u | head -80; tail -50 build.log; exit 1; }
+          echo 'Native app compiled successfully.'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compile-log
+          path: build.log
+          if-no-files-found: ignore
+
+  cores:
+    name: Build ${{ matrix.core }} for iPhone
+    runs-on: macos-15-intel
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        core: [fceumm, snes9x, genesis_plus_gx, mednafen_pce_fast, fbneo, mamearcade, mupen64plus_next]
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash ci/select_xcode.sh
+      - name: Restore compiled core
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: Frameworks/${{ matrix.core }}.framework
+          key: ios26-arm64-v2-${{ matrix.core }}-${{ hashFiles('ci/cores.json', 'ci/build_core.py', 'ci/patches/**') }}
+      - name: Build pinned source
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          python3 ci/build_core.py '${{ matrix.core }}' > core.log 2>&1 || { tail -100 core.log; exit 1; }
+          tail -3 core.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core-${{ matrix.core }}
+          path: Frameworks/${{ matrix.core }}.framework
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: core-log-${{ matrix.core }}
+          path: core.log
+          if-no-files-found: ignore
+
+  package:
+    name: Verify complete iPhone app
+    needs: [compile, cores]
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    env:
+      INCLUDE_CORES: '1'
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash ci/select_xcode.sh
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: core-*
+          path: build/core-artifacts
+      - run: python3 ci/collect_cores.py
+      - run: brew install xcodegen
+      - run: python3 ci/generate_project.py
+      - name: Build with every bundled engine
+        run: |
+          xcodebuild build -project LightRetro.xcodeproj -scheme LightRetro -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO \
+            > package.log 2>&1 || { grep -E 'error:' package.log | sort -u | head -80; tail -40 package.log; exit 1; }
+          python3 ci/verify_bundle.py build/DerivedData/Build/Products/Release-iphoneos/LightRetro.app
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: package-log
+          path: package.log
+
+  testflight:
+    name: Sign and upload to TestFlight
+    needs: package
+    if: github.event_name == 'workflow_dispatch' && inputs.testflight
+    runs-on: macos-15-intel
+    timeout-minutes: 40
+    env:
+      INCLUDE_CORES: '1'
+      BUILD_NUMBER: ${{ github.run_number }}
+      BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare signing key
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          python3 ci/prepare_signing.py
+      - run: bash ci/select_xcode.sh
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: core-*
+          path: build/core-artifacts
+      - run: python3 ci/collect_cores.py
+      - run: brew install xcodegen
+      - run: python3 ci/generate_project.py
+      - name: Archive
+        run: |
+          xcodebuild archive -project LightRetro.xcodeproj -scheme LightRetro -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/LightRetro.xcarchive \
+            -allowProvisioningUpdates -authenticationKeyPath "$KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            > archive.log 2>&1 || { grep -E 'error:' archive.log | sort -u | head -80; tail -50 archive.log; exit 1; }
+          python3 ci/verify_bundle.py build/LightRetro.xcarchive/Products/Applications/LightRetro.app --signed
+      - name: Export and upload
+        run: |
+          xcodebuild -exportArchive -archivePath build/LightRetro.xcarchive -exportPath build/export \
+            -exportOptionsPlist build/ExportOptions.plist -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            > export.log 2>&1 || { grep -E 'error:|Error' export.log | sort -u | head -80; tail -50 export.log; exit 1; }
+          echo 'Uploaded to App Store Connect. Apple must process the build before it appears in TestFlight.'
+      - name: Remove temporary signing key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/light-retro-keys"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: signing-logs
+          path: |
+            archive.log
+            export.log
+          if-no-files-found: ignore

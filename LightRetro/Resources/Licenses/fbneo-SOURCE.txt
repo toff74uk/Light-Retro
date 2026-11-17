@@ -1,0 +1,5 @@
+fbneo
+FBNeo non-commercial licence and component licences
+Exact corresponding source:
+https://github.com/libretro/FBNeo/tree/afc9d109ef54781a63a4a60fbbd3935d83516853
+Build recipe: ci/build_core.py

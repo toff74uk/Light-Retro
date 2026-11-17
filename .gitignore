@@ -1,0 +1,16 @@
+.DS_Store
+build/
+.cores/
+Frameworks/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.log
+*.p8
+*.p12
+*.mobileprovision
+*.keystore
+*.jks
+ExportOptions.plist
+.env
+__pycache__/

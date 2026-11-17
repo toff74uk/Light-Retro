@@ -1,0 +1,7 @@
+mamearcade
+GPL-2.0-or-later and component licences
+Exact upstream source:
+https://github.com/libretro/mame/tree/5f5a07748ce5c239c4118463ce8e6473743d4859
+Light Retro patches (part of corresponding source):
+ci/patches/mame-interpreter-cache.patch
+Build recipe: ci/build_core.py and ci/cores.json

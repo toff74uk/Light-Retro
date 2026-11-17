@@ -1,0 +1,69 @@
+name: LightRetro
+options:
+  bundleIdPrefix: com.lightretro
+  deploymentTarget:
+    iOS: '17.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    CLANG_CXX_LANGUAGE_STANDARD: c++17
+    IPHONEOS_DEPLOYMENT_TARGET: '17.0'
+    TARGETED_DEVICE_FAMILY: '1,2'
+    MARKETING_VERSION: '0.2'
+    CURRENT_PROJECT_VERSION: ${BUILD_NUMBER}
+    DEVELOPMENT_TEAM: ${TEAM_ID}
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    SWIFT_OBJC_BRIDGING_HEADER: LightRetro/Emulation/BridgingHeader.h
+    CLANG_ENABLE_MODULES: YES
+targets:
+  LightRetro:
+    type: application
+    platform: iOS
+    sources:
+      - path: LightRetro
+        excludes: [Resources]
+      - path: LightRetro/Resources/Assets.xcassets
+      - path: LightRetro/Resources/Licenses
+        type: folder
+        buildPhase: resources
+      - path: LightRetro/Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ${BUNDLE_ID}
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        LD_RUNPATH_SEARCH_PATHS: '$(inherited) @executable_path/Frameworks'
+    info:
+      path: build/Info.plist
+      properties:
+        CFBundleDisplayName: Light Retro
+        CFBundleShortVersionString: '0.2'
+        CFBundleVersion: ${BUILD_NUMBER}
+        LSRequiresIPhoneOS: true
+        UILaunchScreen:
+          UIColorName: ''
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        ITSAppUsesNonExemptEncryption: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        'UISupportedInterfaceOrientations~ipad': [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+    dependencies:
+      - sdk: AVFoundation.framework
+      - sdk: GameController.framework
+      - sdk: QuartzCore.framework
+      - sdk: OpenGLES.framework
+schemes:
+  LightRetro:
+    build:
+      targets:
+        LightRetro: all
+    run:
+      config: Debug
+    archive:
+      config: Release
