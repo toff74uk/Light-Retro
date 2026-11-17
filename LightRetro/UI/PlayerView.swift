@@ -37,13 +37,14 @@ import GameController
             if !hasResume { resume() }
         } catch { message = error.localizedDescription }
     }
-    func resume() { guard loaded else { return }; paused = false; engine.start(); UIApplication.shared.isIdleTimerDisabled = true }
+    func resume() { guard loaded else { return }; hasResume = false; paused = false; engine.start(); UIApplication.shared.isIdleTimerDisabled = true }
     func pause() { engine.pause(); paused = true; UIApplication.shared.isIdleTimerDisabled = false; if !engine.saveRAM() { message = "Could not save battery progress. Check your iPhone's free space." } }
     func restoreAutomatic() { guard let saves else { return }; if engine.loadState(saves.appendingPathComponent("auto.state").path) { hasResume = false; resume() } else { message = "This automatic save could not be loaded. It may belong to an older engine build." } }
     func saveSlot() { guard let saves else { return }; message = engine.saveState(saves.appendingPathComponent("slot-\(slot).state").path) ? "Saved to slot \(slot)." : "The state could not be saved. Check free space; this game may not support save states." }
     func loadSlot() { guard let saves else { return }; if engine.loadState(saves.appendingPathComponent("slot-\(slot).state").path) { resume() } else { message = "Slot \(slot) is empty or incompatible with this game engine." } }
     @discardableResult func automaticSave() -> Bool {
-        guard loaded, let saves else { return true }
+        // Preserve the existing automatic state until the player chooses to play.
+        guard loaded, !hasResume, let saves else { return true }
         let ram = engine.saveRAM()
         let state = engine.saveState(saves.appendingPathComponent("auto.state").path)
         if !ram || !state { message = "Some progress could not be saved. Check your free space. You can retry, or exit without an automatic state." }

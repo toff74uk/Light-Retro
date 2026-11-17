@@ -26,7 +26,11 @@ Core source is fetched at exact commits and built with the iOS SDK, then each dy
 - `Tests/frame_audio.cpp`: RGB conversion including row pitch and bounds, channel ordering, audio underrun and ring capacity/wraparound.
 - `Tests/analog_input.cpp`: signed axes, clamping, invalid indices/values, port isolation and clearing. Passed locally with ASan/UBSan.
 - `Tests/test_core_build.py`: pinned build policy and no-JIT flags. Passed locally; the upstream N64 makefile also resolved to 275 source files without native recompilers or Vulkan.
-- GitHub Actions is configured for native iPhone compilation, source compilation of every bundled core and complete bundle verification. These Mac checks have not run yet.
+- GitHub Actions runs native iPhone compilation, source compilation of every bundled core and complete bundle verification. Check the latest run for results; successful source compilation alone does not establish device compatibility.
 - Device-only behavior remains unverified until TestFlight installation: game compatibility and speed, physical controllers, touch combinations, audio interruptions, USB/cloud file-provider permissions, automatic state restore, and memory pressure.
+
+### Save/resume device regression
+
+Create an automatic save with recognisable progress. Reopen the game and, before choosing Resume or Start fresh, switch apps and return, then exit from the pause menu. Reopen again and confirm Resume restores the original progress. Repeat with N64, whose core completes initialization on its first frame. Also load a manual slot from the initial resume menu, play, exit and confirm the next automatic resume uses that new session. The frontend preserves an awaiting automatic save and initializes a core before serialization or restoration; this sequence still requires device verification.
 
 Reference implementation/docs: [libretro iOS build guidance](https://docs.libretro.com/development/retroarch/compilation/ios/), [libretro API header](https://github.com/libretro/libretro-fceumm/tree/77468e568d9fe9c48d684ca911f1a3fe7259fdf7/src/drivers/libretro/libretro-common/include), [Apple GameController](https://developer.apple.com/documentation/gamecontroller), [Apple review guidelines](https://developer.apple.com/app-store/review/guidelines/).

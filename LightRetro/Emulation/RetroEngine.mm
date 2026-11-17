@@ -38,7 +38,7 @@ struct CoreAPI {
 struct CoreContext {
     void* handle=nullptr;
     CoreAPI api{};
-    bool initialized=false, loaded=false;
+    bool initialized=false, loaded=false, hasRun=false;
     std::string system, save, game, corePath;
     std::map<std::string,std::string> options;
     std::vector<uint8_t> rom, pixels;
@@ -70,6 +70,7 @@ static __weak RetroEngine* frontend=nil;
 - (void)applyGeometry:(const retro_game_geometry*)geometry;
 - (uintptr_t)framebuffer;
 - (void)presentWidth:(unsigned)width height:(unsigned)height;
+- (BOOL)prepareStateOperation;
 @end
 
 static uintptr_t currentFramebuffer() { return [frontend framebuffer]; }
@@ -274,7 +275,7 @@ static int16_t inputState(unsigned port,unsigned device,unsigned index,unsigned 
     double step=1.0/_core->fps;
     int frames=0;
     [_videoView makeCurrent];
-    while(_accumulator>=step && frames<4) { _core->api.run(); _accumulator-=step; frames++; step=1.0/_core->fps; }
+    while(_accumulator>=step && frames<4) { _core->api.run(); _core->hasRun=true; _accumulator-=step; frames++; step=1.0/_core->fps; }
     if(frames==4) _accumulator=0;
     if(_core->audioChanged) {
         [_audioEngine stop]; _audioEngine=nil; _audioSource=nil;
@@ -304,17 +305,24 @@ static int16_t inputState(unsigned port,unsigned device,unsigned index,unsigned 
     NSData* data=[NSData dataWithBytes:memory length:size];
     return [data writeToFile:[@(_core->save.c_str()) stringByAppendingPathComponent:@"battery.srm"] options:NSDataWritingAtomic error:nil];
 }
-- (BOOL)saveState:(NSString*)path {
+- (BOOL)prepareStateOperation {
     if(!_core || !_core->loaded) return NO;
+    if(UIApplication.sharedApplication.applicationState==UIApplicationStateBackground) return NO;
     [_videoView makeCurrent];
+    // Some cores (including N64) finish initialization on their first frame.
+    // A saved game may be selected before the display link has ever run.
+    if(!_core->hasRun) { _core->api.run(); _core->hasRun=true; }
+    return YES;
+}
+- (BOOL)saveState:(NSString*)path {
+    if(![self prepareStateOperation]) return NO;
     size_t size=_core->api.serialize_size(); if(!size || size>128*1024*1024) return NO;
     NSMutableData* bytes=[NSMutableData dataWithLength:size];
     if(!_core->api.serialize(bytes.mutableBytes,size)) return NO;
     return [bytes writeToFile:path options:NSDataWritingAtomic error:nil];
 }
 - (BOOL)loadState:(NSString*)path {
-    if(!_core || !_core->loaded) return NO;
-    [_videoView makeCurrent];
+    if(![self prepareStateOperation]) return NO;
     NSData* data=[NSData dataWithContentsOfFile:path]; if(!data || data.length!=_core->api.serialize_size()) return NO;
     return _core->api.unserialize(data.bytes,data.length);
 }
