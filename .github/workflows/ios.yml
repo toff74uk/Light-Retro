@@ -148,10 +148,13 @@ jobs:
       - run: python3 ci/generate_project.py
       - name: Archive
         run: |
+          # Hosted Macs are disposable. Use a temporary ad-hoc signature here;
+          # exportArchive replaces it with Apple's cloud distribution signature.
+          # This avoids creating development certificates whose private keys
+          # would disappear with the runner, and never revokes account certificates.
           xcodebuild archive -project LightRetro.xcodeproj -scheme LightRetro -configuration Release \
             -destination 'generic/platform=iOS' -archivePath build/LightRetro.xcarchive \
-            -allowProvisioningUpdates -authenticationKeyPath "$KEY_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Automatic \
             > archive.log 2>&1 || { grep -E 'error:' archive.log | sort -u | head -80; tail -50 archive.log; exit 1; }
           python3 ci/verify_bundle.py build/LightRetro.xcarchive/Products/Applications/LightRetro.app --signed
       - name: Export and upload
