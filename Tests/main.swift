@@ -171,3 +171,20 @@ tuned.controlResponse = .steady
 tuned.largeTouchButtons = true
 let restoredTuning = try JSONDecoder().decode(PlayerProfile.self, from: JSONEncoder().encode(tuned))
 check(restoredTuning.controlResponse == .steady && restoredTuning.largeTouchButtons == true && migrated.profiles[0].controlResponse == nil, "Controls are saved per profile and older profiles use defaults")
+
+for (stem, count) in [("1942", 2), ("ffight", 3), ("mslug", 4), ("sfiii", 6), ("sfiii3", 6), ("unlisted", 6)] {
+    let title = Game(title: "Renamed", system: .arcade, relativePath: "shared/" + stem.uppercased() + ".zip")
+    check(catalogue.arcadeButtonCount(for: title) == count, "Choose MAME touch controls using the original set name")
+}
+var padProfile = migrated.profiles[0]
+var fbGame = manual
+fbGame.system = .fbneo
+check(padProfile.touchButtonOverride(for: manual) == nil, "Older profiles start in automatic mode")
+padProfile.setTouchButtonOverride(5, for: manual)
+let reopened = try JSONDecoder().decode(PlayerProfile.self, from: JSONEncoder().encode(padProfile))
+check(reopened.touchButtonOverride(for: fbGame) == 5, "Remember the layout across arcade cores and relaunches")
+check(PlayerProfile(name: "Other").touchButtonOverride(for: manual) == nil, "Layouts are per profile")
+check(reopened.touchButtonOverride(for: oldFB) == nil, "One game's override does not affect other games")
+padProfile.setTouchButtonOverride(nil, for: fbGame)
+check(padProfile.touchButtonOverride(for: manual) == nil, "Automatic removes the saved override")
+print("Arcade button counts and saved layouts passed")

@@ -174,6 +174,23 @@ struct PlayerProfile: Identifiable, Codable {
     var screensaverMinutes: Int?
     var controlResponse: ControlResponse?
     var largeTouchButtons: Bool?
+    var arcadeTouchButtons: [String: Int]?
+
+    func touchButtonOverride(for game: Game) -> Int? {
+        guard game.system.isArcade, let count = arcadeTouchButtons?[game.romStem.lowercased()],
+              (2...6).contains(count) else { return nil }
+        return count
+    }
+    mutating func setTouchButtonOverride(_ count: Int?, for game: Game) {
+        guard game.system.isArcade else { return }
+        let key = game.romStem.lowercased()
+        if let count, (2...6).contains(count) {
+            if arcadeTouchButtons == nil { arcadeTouchButtons = [:] }
+            arcadeTouchButtons?[key] = count
+        } else {
+            arcadeTouchButtons?.removeValue(forKey: key)
+        }
+    }
 }
 
 struct LibraryData: Codable {

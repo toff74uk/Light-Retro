@@ -18,6 +18,7 @@ final class GameCatalogue {
     let fbneo: [String: String]
     static let fbneoBoards = ["CPS-1", "CPS-2", "CPS-3", "Neo Geo", "Other"]
     private let boardBySet: [String: String]
+    private let buttonCountBySet: [String: Int]
     let collections: [GameCollection]
     private let descriptions: [String: String]
     init(directory: URL? = Bundle.main.resourceURL?.appendingPathComponent("Catalogue")) {
@@ -27,6 +28,13 @@ final class GameCatalogue {
         }
         mame = read("mame-titles.json", as: [String: [String]].self, fallback: [:])
         fbneo = read("fbneo-titles.json", as: [String: String].self, fallback: [:])
+        let buttonGroups = read("arcade-buttons.json", as: [String: [String]].self, fallback: [:])
+        var counts: [String: Int] = [:]
+        for (group, sets) in buttonGroups {
+            guard let count = Int(group), (2...5).contains(count) else { continue }
+            for stem in sets { counts[stem] = count }
+        }
+        buttonCountBySet = counts
         let boards = read("fbneo-boards.json", as: [String: [String]].self, fallback: [:])
         var boardBySet: [String: String] = [:]
         for (board, names) in boards {
@@ -36,6 +44,8 @@ final class GameCatalogue {
         collections = read("collections.json", as: [GameCollection].self, fallback: [])
         descriptions = read("descriptions.json", as: [String: String].self, fallback: [:])
     }
+    func arcadeButtonCount(for game: Game) -> Int { buttonCountBySet[game.romStem.lowercased()] ?? 6 }
+
     func fbneoBoard(for game: Game) -> String? { boardBySet[game.romStem.lowercased()] }
 
     func isListed(_ game: Game) -> Bool { game.system != .fbneo || fbneoBoard(for: game) != nil }

@@ -5,3 +5,5 @@ https://github.com/libretro/mame/tree/5f5a07748ce5c239c4118463ce8e6473743d4859
 Light Retro patches (part of corresponding source):
 ci/patches/mame-interpreter-cache.patch
 Build recipe: ci/build_core.py and ci/cores.json
+
+Arcade touch button counts are derived from the MAME 0.289 -listxml export. Regenerate the bundled table with ci/arcade_buttons.py and mame0289lx.zip from https://github.com/mamedev/mame/releases/tag/mame0289.

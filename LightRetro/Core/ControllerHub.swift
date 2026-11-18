@@ -21,7 +21,7 @@ struct GamepadState {
     private var touch: Set<Int> = []
     private var touchDpad: Set<Int> = []
     private var touchSticks: [Int: [Float]] = [:]
-    private var touchC: Set<Int> = []
+    @Published private(set) var pressedC: Set<Int> = []
     private var repeatedAt = Date.distantPast
     private var pauseHeld = false
     init() {
@@ -46,11 +46,12 @@ struct GamepadState {
         touchSticks[stick] = [x,y]; poll()
     }
     func setTouchC(_ direction: Int, down: Bool) {
-        if down { touchC.insert(direction) } else { touchC.remove(direction) }
-        setTouchStick(1, x: Float((touchC.contains(7) ? 1 : 0) - (touchC.contains(6) ? 1 : 0)),
-                      y: Float((touchC.contains(5) ? 1 : 0) - (touchC.contains(4) ? 1 : 0)))
+        guard pressedC.contains(direction) != down else { return }
+        if down { pressedC.insert(direction) } else { pressedC.remove(direction) }
+        setTouchStick(1, x: Float((pressedC.contains(7) ? 1 : 0) - (pressedC.contains(6) ? 1 : 0)),
+                      y: Float((pressedC.contains(5) ? 1 : 0) - (pressedC.contains(4) ? 1 : 0)))
     }
-    func clear() { touch.removeAll(); touchDpad.removeAll(); touchSticks.removeAll(); touchC.removeAll(); previous.removeAll(); pressed.removeAll() }
+    func clear() { touch.removeAll(); touchDpad.removeAll(); touchSticks.removeAll(); pressedC.removeAll(); previous.removeAll(); pressed.removeAll() }
     private func poll() {
         let controllers = GCController.controllers().filter { $0.extendedGamepad != nil }
         let updated = controllers.map { $0.vendorName ?? "Controller" }

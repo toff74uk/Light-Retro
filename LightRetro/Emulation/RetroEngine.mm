@@ -141,7 +141,23 @@ static bool environment(unsigned command, void* data) {
         case RETRO_ENVIRONMENT_GET_INPUT_DEVICE_CAPABILITIES: *static_cast<uint64_t*>(data)=(1ULL<<RETRO_DEVICE_JOYPAD)|(1ULL<<RETRO_DEVICE_ANALOG); return true;
         case RETRO_ENVIRONMENT_GET_LANGUAGE: *static_cast<unsigned*>(data)=RETRO_LANGUAGE_ENGLISH; return true;
         case RETRO_ENVIRONMENT_GET_FASTFORWARDING: *static_cast<bool*>(data)=false; return true;
-        case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS:
+        case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS: {
+            if (active->name != "fbneo" || !frontend.arcadeInputsChanged) return true;
+            // The core emits P1 inputs in driver order, followed by optional
+            // combination macros. Copy the IDs before it frees the descriptors.
+            NSMutableArray<NSNumber *> *ids = [NSMutableArray array];
+            for (auto *d = static_cast<const retro_input_descriptor *>(data); d && d->description; ++d) {
+                if (d->port || d->index || d->device != RETRO_DEVICE_JOYPAD ||
+                    d->id >= 16 || (d->id >= 2 && d->id <= 7)) continue;
+                NSString *name = [NSString stringWithUTF8String:d->description];
+                if (!name.length || [name hasPrefix:@"Buttons "] || [name containsString:@"(Fake)"] ||
+                    [@[@"Select", @"Start", @"Coin", @"Reset", @"Service", @"Test", @"Diagnostics"] containsObject:name]) continue;
+                NSNumber *button = @(d->id);
+                if (![ids containsObject:button]) [ids addObject:button];
+            }
+            frontend.arcadeInputsChanged([ids copy]);
+            return true;
+        }
         case RETRO_ENVIRONMENT_SET_CONTROLLER_INFO:
         case RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME: return true;
         case RETRO_ENVIRONMENT_SET_MESSAGE: {

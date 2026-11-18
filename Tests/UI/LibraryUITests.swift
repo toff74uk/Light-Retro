@@ -1,6 +1,29 @@
 import XCTest
 
 final class LibraryUITests: XCTestCase {
+    func testArcadeLayoutSwitchInBothOrientations() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-preview", "--paused-game"]
+        XCUIDevice.shared.orientation = .landscapeLeft
+        app.launch()
+        let fighter = app.buttons["game-sf2"]
+        XCTAssertTrue(fighter.waitForExistence(timeout: 20))
+        fighter.tap()
+        app.buttons["play-selected"].tap()
+        app.buttons["Continue playing"].tap()
+        let layout = app.buttons["arcade-layout"]
+        XCTAssertTrue(layout.waitForExistence(timeout: 5))
+        XCTAssertEqual(layout.value as? String, "6 buttons")
+        layout.tap()
+        app.buttons["3 buttons"].tap()
+        XCTAssertEqual(layout.value as? String, "3 buttons")
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertTrue(layout.isHittable)
+        layout.tap()
+        app.buttons["Automatic (6 buttons)"].tap()
+        XCTAssertEqual(layout.value as? String, "6 buttons")
+    }
+
     func testPauseExitStaysVisibleAndCanBeCancelled() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-preview", "--paused-game"]

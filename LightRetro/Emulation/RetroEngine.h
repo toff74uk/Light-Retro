@@ -6,6 +6,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, readonly) double aspectRatio;
 @property(nonatomic, readonly) BOOL running;
 @property(nonatomic, copy, nullable) void (^messageHandler)(NSString *message);
+@property(nonatomic, copy, nullable) void (^arcadeInputsChanged)(NSArray<NSNumber *> *buttonIDs);
 // All frontend calls are on the main thread; only audio playback runs elsewhere.
 - (nullable NSString *)loadCore:(NSString *)core game:(NSString *)game system:(NSString *)system save:(NSString *)save;
 - (void)start;
