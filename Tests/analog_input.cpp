@@ -1,8 +1,23 @@
 #include "../LightRetro/Emulation/AnalogInput.hpp"
+#include "../LightRetro/Emulation/JoypadButtons.hpp"
 #include <cassert>
 #include <limits>
 #include <iostream>
 int main() {
+    JoypadButtons buttons;
+    buttons.set(8, true);
+    buttons.set(8, false);
+    assert(buttons.state() == (1u << 8)); // A complete tap between frames.
+    buttons.finishFrame();
+    assert(buttons.state() == 0);
+    buttons.set(0, true);
+    buttons.finishFrame();
+    assert(buttons.state() == 1); // Held buttons remain down.
+    buttons.set(0, false);
+    buttons.set(6, true);
+    buttons.set(6, false);
+    buttons.set(7, true);
+    assert(buttons.state() == (1u << 7)); // Moving right releases left immediately.
     AnalogInput input;
     assert(input.get(0,0,0)==0);
     input.set(0,0,0,1); input.set(0,0,1,-1);

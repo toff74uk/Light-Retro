@@ -8,6 +8,7 @@
 #include "libretro.h"
 #include "FrameAudio.hpp"
 #include "AnalogInput.hpp"
+#include "JoypadButtons.hpp"
 #import "RetroVideoView.h"
 #include <cstdarg>
 #include <cstdio>
@@ -43,7 +44,7 @@ struct CoreContext {
     std::map<std::string,std::string> options;
     std::vector<uint8_t> rom, pixels;
     unsigned pixelFormat=RETRO_PIXEL_FORMAT_0RGB1555;
-    uint16_t buttons[4]{};
+    JoypadButtons buttons[4]{};
     AnalogInput analog;
     retro_hw_render_callback hardware{};
     bool hardwareReady=false, audioChanged=false;
@@ -162,8 +163,9 @@ static int16_t inputState(unsigned port,unsigned device,unsigned index,unsigned 
     if(!active || port>=4) return 0;
     if((device&RETRO_DEVICE_MASK)==RETRO_DEVICE_ANALOG) return active->analog.get(port,index,id);
     if((device&RETRO_DEVICE_MASK)!=RETRO_DEVICE_JOYPAD) return 0;
-    if(id==RETRO_DEVICE_ID_JOYPAD_MASK) return active->buttons[port];
-    return id<16 ? ((active->buttons[port]>>id)&1) : 0;
+    const auto state = active->buttons[port].state();
+    if(id==RETRO_DEVICE_ID_JOYPAD_MASK) return state;
+    return id<16 ? ((state>>id)&1) : 0;
 }
 
 @implementation RetroEngine
@@ -275,7 +277,11 @@ static int16_t inputState(unsigned port,unsigned device,unsigned index,unsigned 
     double step=1.0/_core->fps;
     int frames=0;
     [_videoView makeCurrent];
-    while(_accumulator>=step && frames<4) { _core->api.run(); _core->hasRun=true; _accumulator-=step; frames++; step=1.0/_core->fps; }
+    while(_accumulator>=step && frames<4) {
+        _core->api.run();
+        for (auto& port : _core->buttons) port.finishFrame();
+        _core->hasRun=true; _accumulator-=step; frames++; step=1.0/_core->fps;
+    }
     if(frames==4) _accumulator=0;
     if(_core->audioChanged) {
         [_audioEngine stop]; _audioEngine=nil; _audioSource=nil;
@@ -329,12 +335,12 @@ static int16_t inputState(unsigned port,unsigned device,unsigned index,unsigned 
 - (void)resetGame { if(_core && _core->loaded) { [_videoView makeCurrent]; _core->api.reset(); } }
 - (void)setButton:(NSInteger)button pressed:(BOOL)pressed port:(NSInteger)port {
     if(!_core || port<0 || port>=4 || button<0 || button>=16) return;
-    if(pressed) _core->buttons[port]|=uint16_t(1<<button); else _core->buttons[port]&=uint16_t(~(1<<button));
+    _core->buttons[port].set((unsigned)button, pressed);
 }
 - (void)setAxis:(NSInteger)axis value:(float)value stick:(NSInteger)stick port:(NSInteger)port {
     if(_core) _core->analog.set((int)port,(int)stick,(int)axis,value);
 }
-- (void)clearButtons { if(_core) { memset(_core->buttons,0,sizeof(_core->buttons)); _core->analog.clear(); } }
+- (void)clearButtons { if(_core) { for (auto& port : _core->buttons) port = {}; _core->analog.clear(); } }
 - (void)finishGraphics { [_videoView finish]; }
 - (void)stop {
     [self pause]; [self saveRAM];

@@ -1,6 +1,27 @@
 import XCTest
 
 final class LibraryUITests: XCTestCase {
+    func testPauseExitStaysVisibleAndCanBeCancelled() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-preview", "--paused-game"]
+        XCUIDevice.shared.orientation = .landscapeLeft
+        app.launch()
+        let play = app.buttons["play-selected"]
+        XCTAssertTrue(play.waitForExistence(timeout: 20))
+        play.tap()
+        let discard = app.buttons["pause-exit-without-saving"]
+        XCTAssertTrue(discard.waitForExistence(timeout: 5))
+        XCTAssertTrue(discard.isHittable)
+        XCTAssertTrue(app.buttons["pause-save-exit"].isHittable)
+        discard.tap()
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(discard.isHittable)
+        XCUIDevice.shared.orientation = .portrait
+        discard.tap()
+        app.buttons["Exit"].tap()
+        XCTAssertTrue(play.waitForExistence(timeout: 5))
+    }
+
     func testLibraryFolderEntryAndSettingsInBothOrientations() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-preview"]

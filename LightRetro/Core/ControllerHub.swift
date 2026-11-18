@@ -14,10 +14,12 @@ struct GamepadState {
     var onMenuInput: ((Int) -> Void)?
     var onGameInput: (([GamepadState]) -> Void)?
     var analogueGameplay = false
+    var response = ControlResponse.standard
     var onPause: (() -> Void)?
     private var timer: Timer?
     private var previous: Set<Int> = []
     private var touch: Set<Int> = []
+    private var touchDpad: Set<Int> = []
     private var touchSticks: [Int: [Float]] = [:]
     private var touchC: Set<Int> = []
     private var repeatedAt = Date.distantPast
@@ -29,7 +31,16 @@ struct GamepadState {
         }
         if let timer { RunLoop.main.add(timer, forMode: .common) }
     }
-    func setTouch(_ button: Int, down: Bool) { if down { touch.insert(button) } else { touch.remove(button) }; poll() }
+    func setTouch(_ button: Int, down: Bool) {
+        guard touch.contains(button) != down else { return }
+        if down { touch.insert(button) } else { touch.remove(button) }
+        poll()
+    }
+    func setTouchDirections(_ directions: Set<Int>) {
+        guard touchDpad != directions else { return }
+        touchDpad = directions
+        poll()
+    }
     func setTouchStick(_ stick: Int, x: Float, y: Float) {
         guard (0..<2).contains(stick) else { return }
         touchSticks[stick] = [x,y]; poll()
@@ -39,7 +50,7 @@ struct GamepadState {
         setTouchStick(1, x: Float((touchC.contains(7) ? 1 : 0) - (touchC.contains(6) ? 1 : 0)),
                       y: Float((touchC.contains(5) ? 1 : 0) - (touchC.contains(4) ? 1 : 0)))
     }
-    func clear() { touch.removeAll(); touchSticks.removeAll(); touchC.removeAll(); previous.removeAll(); pressed.removeAll() }
+    func clear() { touch.removeAll(); touchDpad.removeAll(); touchSticks.removeAll(); touchC.removeAll(); previous.removeAll(); pressed.removeAll() }
     private func poll() {
         let controllers = GCController.controllers().filter { $0.extendedGamepad != nil }
         let updated = controllers.map { $0.vendorName ?? "Controller" }
@@ -52,18 +63,19 @@ struct GamepadState {
                 (10,g.leftShoulder.isPressed),(11,g.rightShoulder.isPressed),(12,g.leftTrigger.isPressed),(13,g.rightTrigger.isPressed),
                 (3,g.buttonMenu.isPressed),(2,g.buttonOptions?.isPressed ?? false),
                 (14,g.leftThumbstickButton?.isPressed ?? false),(15,g.rightThumbstickButton?.isPressed ?? false),
-                (4,g.dpad.up.isPressed || !analogueGameplay && g.leftThumbstick.yAxis.value > 0.5),
-                (5,g.dpad.down.isPressed || !analogueGameplay && g.leftThumbstick.yAxis.value < -0.5),
-                (6,g.dpad.left.isPressed || !analogueGameplay && g.leftThumbstick.xAxis.value < -0.5),
-                (7,g.dpad.right.isPressed || !analogueGameplay && g.leftThumbstick.xAxis.value > 0.5)
+                (4,g.dpad.up.isPressed || !analogueGameplay && g.leftThumbstick.yAxis.value > response.digitalThreshold),
+                (5,g.dpad.down.isPressed || !analogueGameplay && g.leftThumbstick.yAxis.value < -response.digitalThreshold),
+                (6,g.dpad.left.isPressed || !analogueGameplay && g.leftThumbstick.xAxis.value < -response.digitalThreshold),
+                (7,g.dpad.right.isPressed || !analogueGameplay && g.leftThumbstick.xAxis.value > response.digitalThreshold)
             ]
             ports[index].buttons = Dictionary(uniqueKeysWithValues: map)
             for (stick, value) in [g.leftThumbstick, g.rightThumbstick].enumerated() {
-                let x = value.xAxis.value, y = -value.yAxis.value
-                ports[index].sticks[stick] = x*x+y*y < 0.015 ? [0,0] : [x,y]
+                let (x, y) = response.stick(x: value.xAxis.value, y: -value.yAxis.value)
+                ports[index].sticks[stick] = [x, y]
             }
         }
         for button in touch { ports[0].buttons[button] = true }
+        for direction in touchDpad { ports[0].buttons[direction] = true }
         for (stick, value) in touchSticks {
             if value.contains(where: { $0 != 0 }) { ports[0].sticks[stick] = value }
         }

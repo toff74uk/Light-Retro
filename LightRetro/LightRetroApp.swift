@@ -7,6 +7,9 @@ import SwiftUI
         WindowGroup {
             LibraryView().environmentObject(store).environmentObject(controllers)
                 .preferredColorScheme(.dark).tint(store.tint)
+                .onChange(of: store.profile.controlResponse, initial: true) { _, value in
+                    controllers.response = value ?? .standard
+                }
         }
     }
 }

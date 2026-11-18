@@ -100,6 +100,7 @@ struct SettingsView: View {
         case .bios: BIOSView()
         case .controller:
             Form {
+                Section("Gameplay controls") { ControlOptions() }
                 Section("Connected controllers") {
                     if controllers.names.isEmpty { Text("Pair a controller in iPhone Settings → Bluetooth, or connect it by USB.") }
                     ForEach(Array(controllers.names.enumerated()), id: \.offset) { index, name in Text("Player \(index + 1): \(name)") }
@@ -140,6 +141,24 @@ struct SettingsView: View {
     }
     private func profileBinding<T>(_ key: WritableKeyPath<PlayerProfile, T?>, default value: T) -> Binding<T> {
         Binding(get: { store.profile[keyPath: key] ?? value }, set: { new in store.updateProfile { $0[keyPath: key] = new } })
+    }
+}
+
+struct ControlOptions: View {
+    @EnvironmentObject private var store: LibraryStore
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Stick and D-pad sensitivity").font(.subheadline)
+            Picker("Stick and D-pad sensitivity", selection: Binding(get: { store.profile.controlResponse ?? .standard }, set: { value in
+                store.updateProfile { $0.controlResponse = value }
+            })) {
+                ForEach(ControlResponse.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }.pickerStyle(.segmented)
+            Text("Steady needs more thumb movement. Quick responds closer to the centre.").font(.caption).foregroundStyle(.secondary)
+        }
+        Toggle("Larger touch buttons", isOn: Binding(get: { store.profile.largeTouchButtons ?? false }, set: { value in
+            store.updateProfile { $0.largeTouchButtons = value }
+        }))
     }
 }
 

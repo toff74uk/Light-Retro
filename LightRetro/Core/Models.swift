@@ -131,6 +131,32 @@ struct GameFolder: Identifiable, Codable {
     var subtitle: String { detectSystems == true ? "All systems · automatic detection" : system.title }
 }
 
+enum ControlResponse: String, CaseIterable, Codable {
+    case steady = "Steady", standard = "Standard", quick = "Quick"
+
+    var deadZone: Float {
+        switch self { case .steady: return 0.24; case .standard: return 0.12; case .quick: return 0.06 }
+    }
+    var digitalThreshold: Float {
+        switch self { case .steady: return 0.65; case .standard: return 0.5; case .quick: return 0.33 }
+    }
+    func stick(x: Float, y: Float) -> (Float, Float) {
+        let length = hypot(x, y)
+        guard length > deadZone else { return (0, 0) }
+        let magnitude = (min(1, length) - deadZone) / (1 - deadZone)
+        let gain: Float
+        switch self { case .steady: gain = magnitude * magnitude; case .standard: gain = magnitude; case .quick: gain = sqrt(magnitude) }
+        return (x * gain / length, y * gain / length)
+    }
+    func touchDirections(x: Float, y: Float) -> Set<Int> {
+        guard hypot(x, y) > deadZone else { return [] }
+        var directions = Set<Int>()
+        if abs(x) >= abs(y) * 0.5 { directions.insert(x < 0 ? 6 : 7) }
+        if abs(y) >= abs(x) * 0.5 { directions.insert(y < 0 ? 4 : 5) }
+        return directions
+    }
+}
+
 struct PlayerProfile: Identifiable, Codable {
     var id = UUID()
     var name: String
@@ -146,6 +172,8 @@ struct PlayerProfile: Identifiable, Codable {
     var darkText: Bool?
     var hiddenSystems: Set<GameSystem>?
     var screensaverMinutes: Int?
+    var controlResponse: ControlResponse?
+    var largeTouchButtons: Bool?
 }
 
 struct LibraryData: Codable {

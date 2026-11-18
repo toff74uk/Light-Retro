@@ -151,3 +151,23 @@ for count in [0, 1, 199, 200, 201, 400, 401] {
     check(LibraryPage(items, index: pages).index == pages - 1, "Clamp page after filtering")
 }
 print("Android arcade routing, existing libraries and 200-game pagination passed")
+
+for response in ControlResponse.allCases {
+    let rest = response.stick(x: 0.03, y: 0)
+    check(rest.0 == 0 && rest.1 == 0, "Small stick drift stays neutral")
+    let full = response.stick(x: 0, y: -1)
+    check(full.0 == 0 && full.1 == -1, "Full stick travel is always available")
+    check(response.touchDirections(x: 1, y: -1) == [4, 7], "Touch pad supports diagonals")
+    check(response.touchDirections(x: -1, y: 0) == [6], "Sliding to another direction releases the previous one")
+    check(response.touchDirections(x: 0, y: 0).isEmpty, "Touch pad centre releases all directions")
+}
+let steady = ControlResponse.steady.stick(x: 0.5, y: 0).0
+let standard = ControlResponse.standard.stick(x: 0.5, y: 0).0
+let quick = ControlResponse.quick.stick(x: 0.5, y: 0).0
+check(steady < standard && standard < quick, "Sensitivity changes movement on sticks")
+check(ControlResponse.quick.touchDirections(x: 0.15, y: 0) == [7] && ControlResponse.steady.touchDirections(x: 0.15, y: 0).isEmpty, "Sensitivity changes touch pad activation distance")
+var tuned = PlayerProfile(name: "Player 2")
+tuned.controlResponse = .steady
+tuned.largeTouchButtons = true
+let restoredTuning = try JSONDecoder().decode(PlayerProfile.self, from: JSONEncoder().encode(tuned))
+check(restoredTuning.controlResponse == .steady && restoredTuning.largeTouchButtons == true && migrated.profiles[0].controlResponse == nil, "Controls are saved per profile and older profiles use defaults")

@@ -13,6 +13,10 @@ import GameController
     private var saves: URL?
     func open(_ game: Game, store: LibraryStore, input: ControllerHub) {
         guard !loaded else { return }
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--ui-preview") && arguments.contains("--paused-game") { loaded = true; return }
+        #endif
         do {
             guard let core = game.system.core else { throw StoreError.message(game.system.help) }
             let access = try store.accessGame(game)
@@ -85,8 +89,11 @@ struct PlayerView: View {
                         if showControls && !portrait && !session.paused { TouchControls(system: game.system).environmentObject(input).padding(.horizontal, 14).padding(.bottom, 12) }
                     }
                     if showControls && portrait && !session.paused { TouchControls(system: game.system).environmentObject(input).frame(height: 220).padding(.horizontal, 20) }
+                }.allowsHitTesting(!session.paused).accessibilityHidden(session.paused)
+                if session.paused {
+                    pauseMenu.padding(12).frame(maxWidth: 450, maxHeight: 480)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20)).padding(8)
                 }
-                if session.paused { pauseMenu.frame(maxWidth: 450).padding().background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24)).padding() }
             }
         }.statusBarHidden()
             .onAppear { showControls = input.names.isEmpty; session.open(game, store: store, input: input) }
@@ -100,25 +107,39 @@ struct PlayerView: View {
             .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidDisconnect)) { _ in input.clear(); session.pause(); showControls = true }
             .alert("Light Retro", isPresented: Binding(get: { session.message != nil }, set: { if !$0 { session.message = nil } })) { Button("OK") { session.message = nil } } message: { Text(session.message ?? "") }
             .confirmationDialog("Restart this game? Unsaved progress will be lost.", isPresented: $confirmReset, titleVisibility: .visible) { Button("Restart", role: .destructive) { session.engine.resetGame(); session.hasResume = false; session.resume() } }
-            .confirmationDialog("Exit without an automatic state?", isPresented: $confirmDiscard, titleVisibility: .visible) { Button("Exit", role: .destructive) { session.stop(input: input); dismiss() } }
+            .confirmationDialog("Exit without saving a new state?", isPresented: $confirmDiscard, titleVisibility: .visible) {
+                Button("Exit", role: .destructive) { session.stop(input: input); dismiss() }
+                Button("Cancel", role: .cancel) {}
+            } message: { Text("Your previous automatic state and in-game battery saves are kept.") }
     }
     private var pauseMenu: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                Text(game.displayTitle).font(.title3.bold()).multilineTextAlignment(.center)
-                Text(session.loaded ? "Take a breather." : "Getting ready…").font(.caption).foregroundStyle(.secondary)
-                if session.loaded {
-                    if session.hasResume { Button("Resume saved game") { session.restoreAutomatic() }.buttonStyle(.borderedProminent) }
-                    Button(session.hasResume ? "Start fresh" : "Continue playing") { session.hasResume = false; input.clear(); session.resume() }.buttonStyle(.borderedProminent)
-                    Picker("Save slot", selection: $session.slot) { ForEach(1...3, id: \.self) { Text("Slot \($0)").tag($0) } }.pickerStyle(.segmented)
-                    HStack { Button("Save state") { session.saveSlot() }; Spacer(); Button("Load state") { session.loadSlot() } }.buttonStyle(.bordered)
-                    Toggle("Touch controls", isOn: $showControls)
-                    Button("Restart game") { confirmReset = true }
-                    Button("Save & exit") { session.pause(); if session.automaticSave() { session.stop(input: input); dismiss() } }.buttonStyle(.borderedProminent)
-                    Button("Exit without automatic state", role: .destructive) { confirmDiscard = true }.font(.caption)
-                } else { Button("Back to games") { dismiss() }.buttonStyle(.borderedProminent) }
-            }.padding(6)
-        }.fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: 8) {
+            Text(game.displayTitle).font(.headline).lineLimit(1)
+            if session.loaded {
+                ScrollView {
+                    VStack(spacing: 12) {
+                        if session.hasResume { Button("Resume saved game") { session.restoreAutomatic() }.buttonStyle(.borderedProminent) }
+                        Button(session.hasResume ? "Start fresh" : "Continue playing") { session.hasResume = false; input.clear(); session.resume() }.buttonStyle(.borderedProminent)
+                        Picker("Save slot", selection: $session.slot) { ForEach(1...3, id: \.self) { Text("Slot \($0)").tag($0) } }.pickerStyle(.segmented)
+                        HStack { Button("Save state") { session.saveSlot() }; Spacer(); Button("Load state") { session.loadSlot() } }.buttonStyle(.bordered)
+                        Toggle("Touch controls", isOn: $showControls)
+                        ControlOptions()
+                        Button("Restart game") { confirmReset = true }
+                    }.padding(4)
+                }
+                Divider()
+                HStack(spacing: 8) {
+                    Button { session.pause(); if session.automaticSave() { session.stop(input: input); dismiss() } } label: {
+                        Text("Save & exit").frame(maxWidth: .infinity, minHeight: 44)
+                    }.buttonStyle(.borderedProminent).accessibilityIdentifier("pause-save-exit")
+                    Button(role: .destructive) { confirmDiscard = true } label: {
+                        Text("Exit without saving").frame(maxWidth: .infinity, minHeight: 44)
+                    }.buttonStyle(.bordered).accessibilityIdentifier("pause-exit-without-saving")
+                }
+            } else {
+                Button("Back to games") { dismiss() }.buttonStyle(.borderedProminent)
+            }
+        }
     }
 }
 
@@ -130,6 +151,24 @@ struct GameScreen: UIViewRepresentable {
 
 struct TouchControls: View {
     let system: GameSystem
+    @EnvironmentObject private var store: LibraryStore
+    var body: some View {
+        GeometryReader { area in
+            let padWidth = min(138, area.size.width * 0.36)
+            let requested: CGFloat = store.profile.largeTouchButtons == true ? 54 : 44
+            let widthLimit = (area.size.width - padWidth - 72) / (system == .n64 ? 3 : 2.4)
+            let heightLimit = (min(area.size.height, 220) - 15) / 4
+            TouchLayout(system: system, padWidth: padWidth, size: max(1, min(requested, widthLimit, heightLimit)),
+                        response: store.profile.controlResponse ?? .standard)
+        }
+    }
+}
+
+private struct TouchLayout: View {
+    let system: GameSystem
+    let padWidth: CGFloat
+    let size: CGFloat
+    let response: ControlResponse
     @State private var dpadMode = false
     @EnvironmentObject private var input: ControllerHub
     var body: some View {
@@ -142,8 +181,8 @@ struct TouchControls: View {
                 key("R", 11)
             }
             Spacer(minLength: 4)
-            HStack(alignment: .center) {
-                if system == .n64 && !dpadMode { TouchStick().environmentObject(input).frame(width: 138,height: 138) }
+            HStack(alignment: .center, spacing: 0) {
+                if system == .n64 && !dpadMode { TouchStick(response: response).frame(width: padWidth, height: padWidth) }
                 else { dpad }
                 Spacer(minLength: 2)
                 VStack(spacing: 8) {
@@ -167,32 +206,63 @@ struct TouchControls: View {
         }.frame(maxHeight: 220).frame(maxHeight: .infinity, alignment: .bottom)
     }
     private var dpad: some View {
-        VStack(spacing: 3) {
-            key("↑",4)
-            HStack(spacing: 3) { key("←",6); Color.clear.frame(width: 42,height: 42); key("→",7) }
-            key("↓",5)
-        }
+        let tile = (padWidth - 6) / 3
+        return ZStack {
+            ForEach(4...7, id: \.self) { id in
+                Text(["↑", "↓", "←", "→"][id - 4]).font(.headline).foregroundStyle(.white)
+                    .frame(width: tile, height: tile)
+                    .background(input.pressed.contains(id) ? .orange.opacity(0.8) : .white.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
+                    .offset(x: id == 6 ? -tile-3 : (id == 7 ? tile+3 : 0), y: id == 4 ? -tile-3 : (id == 5 ? tile+3 : 0))
+            }
+        }.frame(width: padWidth, height: padWidth).contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { event in
+                let x = Float(event.location.x * 2 / padWidth - 1)
+                let y = Float(event.location.y * 2 / padWidth - 1)
+                if max(abs(x), abs(y)) <= 1 { input.setTouchDirections(response.touchDirections(x: x, y: y)) }
+                else { input.setTouchDirections([]) }
+            }.onEnded { _ in input.setTouchDirections([]) })
+            .accessibilityElement(children: .ignore).accessibilityLabel("Directional pad")
+            .onDisappear { input.setTouchDirections([]) }
     }
     private func cKey(_ label: String, _ id: Int) -> some View {
-        Text(label).font(.caption.bold()).foregroundStyle(.yellow).frame(width: 40,height: 36)
+        Text(label).font(.caption.bold()).foregroundStyle(.yellow).frame(width: size, height: size)
             .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { _ in input.setTouchC(id, down: true) }.onEnded { _ in input.setTouchC(id, down: false) })
+            .overlay { TouchButtonSurface { input.setTouchC(id, down: $0) } }
             .accessibilityLabel(label).accessibilityAddTraits(.isButton)
             .onDisappear { input.setTouchC(id, down: false) }
     }
     private func key(_ label: String, _ id: Int, small: Bool = false) -> some View {
         Text(label).font(small ? .system(size: 10, weight: .bold) : .headline)
-            .foregroundStyle(.white).frame(width: small ? 58 : 44, height: small ? 32 : 44)
+            .foregroundStyle(.white).frame(width: small ? 58 : size, height: size)
             .background(input.pressed.contains(id) ? .orange.opacity(0.8) : .white.opacity(0.18), in: RoundedRectangle(cornerRadius: 13))
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { _ in input.setTouch(id, down: true) }.onEnded { _ in input.setTouch(id, down: false) })
+            .overlay { TouchButtonSurface { input.setTouch(id, down: $0) } }
             .accessibilityLabel(label).accessibilityAddTraits(.isButton)
             .onDisappear { input.setTouch(id, down: false) }
     }
 }
 
+private struct TouchButtonSurface: UIViewRepresentable {
+    let change: (Bool) -> Void
+    final class Surface: UIControl {
+        var change: ((Bool) -> Void)?
+        @objc func press() { change?(true) }
+        @objc func releaseButton() { change?(false) }
+    }
+    func makeUIView(context: Context) -> Surface {
+        let surface = Surface()
+        surface.isAccessibilityElement = false
+        surface.addTarget(surface, action: #selector(Surface.press), for: [.touchDown, .touchDragEnter])
+        surface.addTarget(surface, action: #selector(Surface.releaseButton), for: [.touchDragExit, .touchUpInside, .touchUpOutside, .touchCancel])
+        return surface
+    }
+    func updateUIView(_ surface: Surface, context: Context) { surface.change = change }
+    static func dismantleUIView(_ surface: Surface, coordinator: ()) { surface.releaseButton(); surface.change = nil }
+}
+
 struct TouchStick: View {
+    let response: ControlResponse
     @EnvironmentObject private var input: ControllerHub
     @State private var offset = CGSize.zero
     var body: some View {
@@ -208,7 +278,8 @@ struct TouchStick: View {
                     let distance = sqrt(dx*dx+dy*dy), travel = max(1,radius-24)
                     let scale = max(1,distance/travel)
                     offset = CGSize(width: dx/scale,height: dy/scale)
-                    input.setTouchStick(0, x: Float(offset.width/travel), y: Float(offset.height/travel))
+                    let (x, y) = response.stick(x: Float(offset.width/travel), y: Float(offset.height/travel))
+                    input.setTouchStick(0, x: x, y: y)
                 }.onEnded { _ in offset = .zero; input.setTouchStick(0, x: 0,y: 0) })
                 .accessibilityLabel("N64 analogue stick")
                 .onDisappear { offset = .zero; input.setTouchStick(0, x: 0,y: 0) }
