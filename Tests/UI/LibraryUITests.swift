@@ -13,14 +13,16 @@ final class LibraryUITests: XCTestCase {
         app.buttons["Continue playing"].tap()
         let layout = app.descendants(matching: .any).matching(identifier: "arcade-layout").firstMatch
         XCTAssertTrue(layout.waitForExistence(timeout: 8))
-        let stick = app.descendants(matching: .any).matching(identifier: "pad-stick").firstMatch
-        XCTAssertEqual(stick.label, "Directional joystick")
         layout.tap()
         XCTAssertTrue(app.buttons["Automatic (6 buttons)"].exists)
         app.buttons["3 buttons"].tap()
         let third = app.descendants(matching: .any).matching(identifier: "pad-3").firstMatch
         let sixth = app.descendants(matching: .any).matching(identifier: "pad-6").firstMatch
         XCTAssertTrue(third.waitForExistence(timeout: 5))
+        // Choosing a layout reveals the touch controls even with a connected controller.
+        let stick = app.descendants(matching: .any).matching(identifier: "pad-stick").firstMatch
+        XCTAssertTrue(stick.waitForExistence(timeout: 5))
+        XCTAssertEqual(stick.label, "Directional joystick")
         XCTAssertFalse(sixth.exists)
         XCUIDevice.shared.orientation = .portrait
         // A native tap synchronises with the rotation animation. Verify it
