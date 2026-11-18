@@ -188,3 +188,46 @@ check(reopened.touchButtonOverride(for: oldFB) == nil, "One game's override does
 padProfile.setTouchButtonOverride(nil, for: fbGame)
 check(padProfile.touchButtonOverride(for: manual) == nil, "Automatic removes the saved override")
 print("Arcade button counts and saved layouts passed")
+
+// A matching disc takes precedence over the FBNeo filename list in automatic folders.
+try fixture("Shared arcade/sfiii3.zip")
+let beforeDisc = try FolderScanner.scan(folder: linked, root: arcadeRoot, catalogue: catalogue)
+let oldSF3 = beforeDisc.games.first { $0.fileName == "sfiii3.zip" }!
+check(oldSF3.system == .fbneo, "An FBNeo archive without a disc keeps its core")
+try fixture("Shared arcade/sfiii3/cap-33s-2.chd")
+try fixture("Shared arcade/sfiii3/cap-33s-1.chd")
+try fixture("Shared arcade/sfiii3r1.zip")
+try fixture("Shared arcade/sfrush.zip")
+try fixture("Shared arcade/sfrush/sfrush.chd")
+try fixture("Shared arcade/sfz3ugd.zip")
+try fixture("Shared arcade/sfz3ugd/gdl-0002.chd")
+try fixture("Shared arcade/PC Engine CD/My Disc.chd")
+let discScan = try FolderScanner.scan(folder: linked, root: arcadeRoot, catalogue: catalogue)
+for stem in ["sfiii3", "sfiii3r1", "sfrush", "sfz3ugd"] {
+    let found = discScan.games.first { $0.romStem == stem && $0.system.isArcade }
+    check(found?.system == .arcade && found?.hasMAMEDisc == true, "Find the right own or parent disc for " + stem)
+}
+check(discScan.games.filter { $0.system == .pcecd }.map(\.fileName) == ["My Disc.chd"], "Only the console disc is a standalone game")
+let explicitFB = try FolderScanner.scan(folder: fbFolder, root: arcadeRoot, catalogue: catalogue)
+check(explicitFB.games.first { $0.romStem == "sfiii3" }?.system == .fbneo, "Explicit core choice is respected")
+var stored = LibraryData()
+stored.folders = [linked]
+stored.games = beforeDisc.games
+stored.profiles[0].favourites.insert(oldSF3.id)
+_ = FolderScanner.merge(discScan.games, into: &stored.games)
+catalogue.updateExistingArcadeRoutes(in: &stored)
+let changed = stored.games.filter { $0.fileName == "sfiii3.zip" }
+check(changed.count == 1 && changed[0].system == .arcade && changed[0].id == oldSF3.id, "Re-route existing games without a duplicate")
+check(changed[0].alternateSaveFolder == "arcade" && stored.profiles[0].favourites.contains(oldSF3.id), "Keep saves and favourites when a CHD appears")
+try fm.removeItem(at: arcadeRoot.appendingPathComponent("sfiii3/cap-33s-2.chd"))
+let wrongRevision = try FolderScanner.scan(folder: linked, root: arcadeRoot, catalogue: catalogue)
+check(wrongRevision.games.first { $0.fileName == "sfiii3.zip" }?.system == .fbneo, "A different revision alone does not match the parent")
+check(wrongRevision.games.first { $0.fileName == "sfiii3r1.zip" }?.system == .arcade, "Clone still finds its own revision in the parent folder")
+print("MAME disc lookup, shared-folder routes and per-core save continuity passed")
+
+let oldCompanion = Game(title: "Old scan", system: .pcecd, relativePath: "sfiii3/cap-33s-1.chd", folderID: linked.id)
+let consoleDisc = Game(title: "My disc", system: .pcecd, relativePath: "PC Engine CD/sfiii3/cap-33s-1.chd", folderID: linked.id)
+stored.games += [oldCompanion, consoleDisc]
+catalogue.updateExistingArcadeRoutes(in: &stored)
+check(!catalogue.isListed(stored.games.first { $0.id == oldCompanion.id }!), "Hide a disc that an older mixed scan listed as a game")
+check(catalogue.isListed(stored.games.first { $0.id == consoleDisc.id }!), "Preserve explicit console disc folders")

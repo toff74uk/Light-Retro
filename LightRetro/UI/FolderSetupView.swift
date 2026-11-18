@@ -19,7 +19,7 @@ struct AddGamesView: View {
                         .disabled(store.busy).accessibilityIdentifier("choose-folder")
                     Text("Includes subfolders and keeps the ROMs in their original location. Select the folder in Files, then tap Open.").font(.footnote)
                     if let system { Text(system.help).font(.footnote).foregroundStyle(.secondary) }
-                    else { Text("Name system folders MAME, FBNeo, NES, N64, SNES, Mega Drive, PC Engine or PCE CD. Arcade archives use Android’s FBNeo list, with other sets routed to MAME. Select a system above to override automatic routing.").font(.footnote).foregroundStyle(.secondary) }
+                    else { Text("Name system folders MAME, FBNeo, NES, N64, SNES, Mega Drive, PC Engine or PCE CD. Arcade sets with a matching CHD use MAME. Keep the CHD in the game or parent set folder beside the ZIP. Other arcade sets follow the Android FBNeo list. Select a system above to override automatic routing.").font(.footnote).foregroundStyle(.secondary) }
                 }
                 Section("Or add individual files") {
                     Button("Import files…", systemImage: "doc.badge.plus") { pickFiles = true }.disabled(system == nil || system == .pcecd || store.busy)

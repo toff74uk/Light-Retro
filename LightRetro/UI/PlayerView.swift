@@ -11,24 +11,37 @@ import GameController
     @Published var hasResume = false
     @Published var fbneoInputs: [Int] = []
     @Published var megaButtons = 6
+    @Published var activeSystem: GameSystem?
     private var access: GameAccess?
     private var saves: URL?
-    func open(_ game: Game, store: LibraryStore, input: ControllerHub) {
+    func open(_ original: Game, store: LibraryStore, input: ControllerHub, useMAME: Bool = false) {
         guard !loaded else { return }
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("--ui-preview") && arguments.contains("--paused-game") { loaded = true; return }
         #endif
         do {
+            let access = try store.accessGame(original)
+            var game = store.resolveArcadeRoute(original, archive: access.url)
+            if useMAME && game.system == .fbneo {
+                let previous = game
+                game.system = .arcade
+                game.preserveSaves(from: previous)
+            }
+            activeSystem = game.system
             guard let core = game.system.core else { throw StoreError.message(game.system.help) }
-            let access = try store.accessGame(game)
             let saves = try store.saveDirectory(for: game)
             if game.system == .mega { megaButtons = TouchPad.megaDriveButtonCount(rom: access.url) }
             if game.system == .fbneo {
                 engine.arcadeInputsChanged = { [weak self] ids in self?.fbneoInputs = ids.map(\.intValue) }
             }
             engine.messageHandler = { [weak self] text in self?.message = text }
-            if let error = engine.loadCore(core, game: access.url.path, system: store.biosURL.path, save: saves.path) { throw StoreError.message(error) }
+            if let error = engine.loadCore(core, game: access.url.path, system: store.biosURL.path, save: saves.path) {
+                if let set = GameCatalogue.shared.discSet(for: game) {
+                    throw StoreError.message(error + "\n\n" + ArcadeFileCheck.report(game: game, archive: access.url, set: set))
+                }
+                throw StoreError.message(error)
+            }
             self.access = access; self.saves = saves; loaded = true
             hasResume = FileManager.default.fileExists(atPath: saves.appendingPathComponent("auto.state").path)
             input.onMenuInput = nil
@@ -76,9 +89,10 @@ struct PlayerView: View {
     @State private var showControls = true
     @State private var confirmReset = false
     @State private var confirmDiscard = false
+    private var activeSystem: GameSystem { session.activeSystem ?? game.system }
     private var automaticButtons: Int {
         if game.system == .mega { return session.megaButtons }
-        if game.system == .fbneo && !session.fbneoInputs.isEmpty { return min(6, max(2, session.fbneoInputs.count)) }
+        if activeSystem == .fbneo && !session.fbneoInputs.isEmpty { return min(6, max(2, session.fbneoInputs.count)) }
         return GameCatalogue.shared.arcadeButtonCount(for: game)
     }
     private var buttons: Int { store.profile.touchButtonOverride(for: game) ?? automaticButtons }
@@ -104,7 +118,7 @@ struct PlayerView: View {
             .accessibilityIdentifier("arcade-layout")
     }
     private var touchPad: some View {
-        TouchControls(system: game.system, count: buttons, fbneoInputs: session.fbneoInputs)
+        TouchControls(system: activeSystem, count: buttons, fbneoInputs: session.fbneoInputs)
     }
 
     var body: some View {
@@ -153,6 +167,24 @@ struct PlayerView: View {
     private var pauseMenu: some View {
         VStack(spacing: 8) {
             Text(game.displayTitle).font(.headline).lineLimit(1)
+            if let set = GameCatalogue.shared.discSet(for: game) {
+                HStack {
+                    Button("Check game files") {
+                        do {
+                            let access = try store.accessGame(game)
+                            var selected = game
+                            selected.system = activeSystem
+                            session.message = ArcadeFileCheck.report(game: selected, archive: access.url, set: set)
+                        } catch { session.message = error.localizedDescription }
+                    }
+                    if activeSystem == .fbneo {
+                        Button("Play with MAME") {
+                            if session.loaded { session.stop(input: input) }
+                            session.open(game, store: store, input: input, useMAME: true)
+                        }
+                    }
+                }.buttonStyle(.bordered)
+            }
             if session.loaded {
                 ScrollView {
                     VStack(spacing: 12) {
@@ -199,7 +231,7 @@ private struct TouchControls: View {
             let width = area.size.width
             let height = min(220, area.size.height)
             let pad = min(138, width * 0.32, height * 0.72)
-            let middle = min(62, max(42, width * 0.14))
+            let middle = min(62, max(44, width * 0.14))
             let columns = (face.map(\.column).max() ?? 0) + 1
             let rows = (face.map(\.row).max() ?? 0) + 1
             let shoulders = system == .snes || system == .n64
@@ -222,6 +254,10 @@ private struct TouchLayout: View {
     let padWidth: CGFloat
     let middle: CGFloat
     let response: ControlResponse
+    private var stickMode: TouchStickMode {
+        if system.isArcade { return .arcade }
+        return system == .n64 && !dpadMode ? .analogue : .directional
+    }
     @State private var dpadMode = false
     @EnvironmentObject private var input: ControllerHub
 
@@ -241,7 +277,8 @@ private struct TouchLayout: View {
             }
             Spacer(minLength: 0)
             HStack(alignment: .center, spacing: 0) {
-                movement
+                TouchStick(response: response, mode: stickMode)
+                    .frame(width: padWidth, height: padWidth)
                 Spacer(minLength: 2)
                 VStack(spacing: 5) {
                     if system != .n64 && (system != .mega || count == 6) {
@@ -255,10 +292,6 @@ private struct TouchLayout: View {
         }
     }
 
-    @ViewBuilder private var movement: some View {
-        if system == .n64 && !dpadMode { TouchStick(response: response).frame(width: padWidth, height: padWidth) }
-        else { dpad }
-    }
     private var faceButtons: some View {
         let width = ((face.map(\.column).max() ?? 0) + 1) * step
         let height = ((face.map(\.row).max() ?? 0) + 1) * step
@@ -293,72 +326,89 @@ private struct TouchLayout: View {
             down = input.pressedC.contains(id)
             change = { input.setTouchC(id, down: $0) }
         }
-        let tint = colour(button)
-        return Text(button.label).font(.system(size: min(19, step * 0.4), weight: .bold, design: .rounded))
-            .foregroundStyle(.white)
-            .frame(width: max(1, step - 4), height: max(1, step - 4))
+        return PadKey(label: button.label, tint: colour(button), down: down,
+                      width: step, height: step, fontSize: min(19, step * 0.4), change: change)
+            .accessibilityLabel(system.isArcade ? "Button " + button.label : button.label)
+            .accessibilityIdentifier("pad-" + button.label)
+    }
+
+    private func key(_ label: String, _ id: Int, width: CGFloat) -> some View {
+        PadKey(label: label, tint: .gray, down: input.pressed.contains(id),
+               width: width, height: 44, fontSize: label.count > 2 ? 12 : 17) {
+            input.setTouch(id, down: $0)
+        }
+    }
+}
+
+// Every gameplay key uses the same full-cell contact area as the N64 face buttons.
+private struct PadKey: View {
+    let label: String
+    let tint: Color
+    let down: Bool
+    let width: CGFloat
+    let height: CGFloat
+    let fontSize: CGFloat
+    let change: (Bool) -> Void
+
+    var body: some View {
+        Text(label).font(.system(size: fontSize, weight: .bold, design: .rounded))
+            .lineLimit(1).minimumScaleFactor(0.7).foregroundStyle(.white)
+            .frame(width: max(1, width - 4), height: max(1, height - 4))
             .background {
-                Circle().fill(.black.opacity(0.60))
-                Circle().fill(tint.opacity(down ? 0.95 : 0.43))
-                Circle().strokeBorder(tint.opacity(0.95), lineWidth: down ? 3 : 1.5)
+                Capsule().fill(.black.opacity(0.60))
+                Capsule().fill(tint.opacity(down ? 0.95 : 0.43))
+                Capsule().strokeBorder(tint.opacity(0.95), lineWidth: down ? 3 : 1.5)
             }
-            .frame(width: step, height: step)
+            .frame(width: width, height: height)
             .overlay { TouchButtonSurface(change: change) }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(system.isArcade ? "Button " + button.label : button.label)
-            .accessibilityAddTraits(.isButton).accessibilityIdentifier("pad-" + button.label)
-            .onDisappear { change(false) }
-    }
-    private var dpad: some View {
-        let tile = (padWidth - 6) / 3
-        return ZStack {
-            ForEach(4...7, id: \.self) { id in
-                Text(["↑", "↓", "←", "→"][id - 4]).font(.headline).foregroundStyle(.white)
-                    .frame(width: tile, height: tile)
-                    .background(input.pressed.contains(id) ? .orange.opacity(0.8) : .white.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
-                    .offset(x: id == 6 ? -tile-3 : (id == 7 ? tile+3 : 0), y: id == 4 ? -tile-3 : (id == 5 ? tile+3 : 0))
-            }
-        }.frame(width: padWidth, height: padWidth).contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { event in
-                let x = Float(event.location.x * 2 / padWidth - 1)
-                let y = Float(event.location.y * 2 / padWidth - 1)
-                if max(abs(x), abs(y)) <= 1 { input.setTouchDirections(response.touchDirections(x: x, y: y)) }
-                else { input.setTouchDirections([]) }
-            }.onEnded { _ in input.setTouchDirections([]) })
-            .accessibilityElement(children: .ignore).accessibilityLabel("Directional pad")
-            .onDisappear { input.setTouchDirections([]) }
-    }
-    private func key(_ label: String, _ id: Int, width: CGFloat) -> some View {
-        Text(label).font(.caption2.bold())
-            .foregroundStyle(.white).frame(width: width, height: min(step, 44))
-            .background(.black.opacity(0.60), in: Capsule())
-            .background(input.pressed.contains(id) ? .orange : .gray, in: Capsule())
-            .overlay { TouchButtonSurface { input.setTouch(id, down: $0) } }
             .accessibilityLabel(label).accessibilityAddTraits(.isButton)
-            .onDisappear { input.setTouch(id, down: false) }
+            .onDisappear { change(false) }
     }
 }
 
 private struct TouchButtonSurface: UIViewRepresentable {
     let change: (Bool) -> Void
-    final class Surface: UIControl {
+
+    final class Surface: UIView {
         var change: ((Bool) -> Void)?
-        @objc func press() { change?(true) }
-        @objc func releaseButton() { change?(false) }
+        private var contacts = Set<UITouch>()
+
+        private func setContacts(_ next: Set<UITouch>) {
+            let wasDown = !contacts.isEmpty
+            contacts = next
+            let isDown = !next.isEmpty
+            if wasDown != isDown { change?(isDown) }
+        }
+        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+            setContacts(contacts.union(touches))
+        }
+        override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+            let inside = touches.filter { bounds.contains($0.location(in: self)) }
+            setContacts(contacts.subtracting(touches).union(inside))
+        }
+        override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+            setContacts(contacts.subtracting(touches))
+        }
+        override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+            setContacts(contacts.subtracting(touches))
+        }
+        func reset() { setContacts([]) }
     }
     func makeUIView(context: Context) -> Surface {
         let surface = Surface()
         surface.isAccessibilityElement = false
-        surface.addTarget(surface, action: #selector(Surface.press), for: [.touchDown, .touchDragEnter])
-        surface.addTarget(surface, action: #selector(Surface.releaseButton), for: [.touchDragExit, .touchUpInside, .touchUpOutside, .touchCancel])
+        surface.isMultipleTouchEnabled = true
+        surface.isExclusiveTouch = false
         return surface
     }
     func updateUIView(_ surface: Surface, context: Context) { surface.change = change }
-    static func dismantleUIView(_ surface: Surface, coordinator: ()) { surface.releaseButton(); surface.change = nil }
+    static func dismantleUIView(_ surface: Surface, coordinator: ()) { surface.reset(); surface.change = nil }
 }
 
 struct TouchStick: View {
     let response: ControlResponse
+    let mode: TouchStickMode
     @EnvironmentObject private var input: ControllerHub
     @State private var offset = CGSize.zero
     var body: some View {
@@ -374,11 +424,19 @@ struct TouchStick: View {
                     let distance = sqrt(dx*dx+dy*dy), travel = max(1,radius-24)
                     let scale = max(1,distance/travel)
                     offset = CGSize(width: dx/scale,height: dy/scale)
-                    let (x, y) = response.stick(x: Float(offset.width/travel), y: Float(offset.height/travel))
-                    input.setTouchStick(0, x: x, y: y)
-                }.onEnded { _ in offset = .zero; input.setTouchStick(0, x: 0,y: 0) })
-                .accessibilityLabel("N64 analogue stick")
-                .onDisappear { offset = .zero; input.setTouchStick(0, x: 0,y: 0) }
+                    input.moveTouchStick(x: Float(offset.width / travel), y: Float(offset.height / travel),
+                                         mode: mode, response: response)
+                }.onEnded { _ in centre() })
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(mode == .analogue ? "N64 analogue stick" : "Directional joystick")
+                .accessibilityIdentifier("pad-stick")
+                .onChange(of: mode) { _ in centre() }
+                .onDisappear { centre() }
         }
+    }
+
+    private func centre() {
+        offset = .zero
+        input.moveTouchStick(x: 0, y: 0, mode: mode, response: response)
     }
 }

@@ -36,9 +36,15 @@ struct GamepadState {
         if down { touch.insert(button) } else { touch.remove(button) }
         poll()
     }
-    func setTouchDirections(_ directions: Set<Int>) {
-        guard touchDpad != directions else { return }
+    func moveTouchStick(x: Float, y: Float, mode: TouchStickMode, response: ControlResponse) {
+        // Arcade cores may read analogue axes (steering) or digital directions (fighters).
+        // Update both before polling so each emulated frame sees the same stick position.
+        let (axisX, axisY) = mode == .directional ? (Float.zero, Float.zero) : response.stick(x: x, y: y)
+        let directions: Set<Int> = mode == .analogue ? [] : response.touchDirections(x: x, y: y)
+        let axes = [axisX, axisY]
+        guard touchDpad != directions || touchSticks[0] != axes else { return }
         touchDpad = directions
+        touchSticks[0] = axes
         poll()
     }
     func setTouchStick(_ stick: Int, x: Float, y: Float) {

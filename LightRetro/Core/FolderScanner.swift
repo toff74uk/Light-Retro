@@ -31,8 +31,14 @@ enum FolderScanner {
             guard LibraryRules.safeRelativePath(relative) else { continue }
             let system = folder.detectSystems == true ? GameSystem.detect(rootName: root.lastPathComponent, relativePath: relative) : folder.system
             guard let system, GameSystem.recognises(relative, for: system) else { ignored += 1; continue }
+            if folder.detectSystems == true, system == .pcecd, file.pathExtension.lowercased() == "chd",
+               GameSystem.namedFolder(rootName: root.lastPathComponent, relativePath: relative) == nil,
+               catalogue.isArcadeDisc(file) { ignored += 1; continue }
             var game = Game(title: "", system: system, relativePath: relative, folderID: folder.id)
-            if folder.detectSystems == true { catalogue.routeAutomaticArcade(&game) }
+            if folder.detectSystems == true {
+                game.hasMAMEDisc = catalogue.discSet(for: game)?.hasCompanion(beside: file)
+                catalogue.routeAutomaticArcade(&game)
+            }
             guard catalogue.isListed(game) else { ignored += 1; continue }
             games.append(catalogue.identify(game))
         }
@@ -53,14 +59,17 @@ enum FolderScanner {
     }
     static func merge(_ scanned: [Game], into existing: inout [Game]) -> Int {
         // O(n), preserving save IDs, favourites and manually chosen titles/covers.
-        func key(_ game: Game) -> String { "\(game.folderID?.uuidString ?? "")|\(game.system.rawValue)|\(game.relativePath)" }
+        func key(_ game: Game) -> String {
+            let family = game.system.isArcade ? "arcade" : game.system.rawValue
+            return "\(game.folderID?.uuidString ?? "")|\(family)|\(game.relativePath)"
+        }
         var index = Dictionary(existing.enumerated().map { (key($0.element), $0.offset) }, uniquingKeysWith: { a, _ in a })
         var added = 0
         for var game in scanned {
             if let i = index[key(game)] {
                 let old = existing[i]
                 game.id = old.id; game.customTitle = old.customTitle; game.artwork = old.artwork
-                game.originalSaveSystem = old.originalSaveSystem
+                game.preserveSaves(from: old)
                 existing[i] = game
             } else { index[key(game)] = existing.count; existing.append(game); added += 1 }
         }

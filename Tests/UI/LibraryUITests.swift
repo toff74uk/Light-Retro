@@ -13,6 +13,8 @@ final class LibraryUITests: XCTestCase {
         app.buttons["Continue playing"].tap()
         let layout = app.descendants(matching: .any).matching(identifier: "arcade-layout").firstMatch
         XCTAssertTrue(layout.waitForExistence(timeout: 8))
+        let stick = app.descendants(matching: .any).matching(identifier: "pad-stick").firstMatch
+        XCTAssertEqual(stick.label, "Directional joystick")
         layout.tap()
         XCTAssertTrue(app.buttons["Automatic (6 buttons)"].exists)
         app.buttons["3 buttons"].tap()

@@ -32,6 +32,8 @@ def verify_bundle(app, signed=False):
     catalogue = app / 'Catalogue'
     assert len(json.loads((catalogue / 'mame-titles.json').read_text())) == 31122, 'Missing Android MAME names'
     assert len(json.loads((catalogue / 'fbneo-titles.json').read_text())) == 8436, 'Missing Android FBNeo names'
+    discs = json.loads((catalogue / 'arcade-discs.json').read_text())
+    assert 'cap-33s-2' in discs['sfiii3']['discs'] and 'sfrush' in discs['sfrush']['discs'], 'Missing MAME CHD data'
     boards = json.loads((catalogue / 'fbneo-boards.json').read_text())
     assert len(set().union(*boards.values())) == 1839, 'Missing Android FBNeo routing data'
     assert len(json.loads((catalogue / 'collections.json').read_text())) == 9, 'Missing curated collections'

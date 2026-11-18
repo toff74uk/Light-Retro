@@ -7,3 +7,4 @@ ci/patches/mame-interpreter-cache.patch
 Build recipe: ci/build_core.py and ci/cores.json
 
 Arcade touch button counts are derived from the MAME 0.289 -listxml export. Regenerate the bundled table with ci/arcade_buttons.py and mame0289lx.zip from https://github.com/mamedev/mame/releases/tag/mame0289.
+Arcade disc filenames, parent sets and SHA-1 identifiers use the same MAME export. Regenerate arcade-discs.json with ci/arcade_discs.py and mame0289lx.zip.

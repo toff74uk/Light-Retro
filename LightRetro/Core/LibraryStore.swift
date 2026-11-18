@@ -194,6 +194,20 @@ import UniformTypeIdentifiers
         try access.prepareConsoleZIP(for: game.system)
         return access
     }
+    // Existing mixed-folder libraries can play a newly added disc immediately, before a rescan.
+    func resolveArcadeRoute(_ original: Game, archive: URL) -> Game {
+        guard let disc = GameCatalogue.shared.discSet(for: original), let folderID = original.folderID,
+              data.folders.contains(where: { $0.id == folderID && $0.detectSystems == true }) else { return original }
+        var game = original
+        game.hasMAMEDisc = disc.hasCompanion(beside: archive)
+        GameCatalogue.shared.routeAutomaticArcade(&game)
+        game.preserveSaves(from: original)
+        if game != original, let index = data.games.firstIndex(where: { $0.id == game.id }) {
+            data.games[index] = game
+            persist()
+        }
+        return game
+    }
     func saveDirectory(for game: Game) throws -> URL {
         var path = savesURL.appendingPathComponent(profile.id.uuidString).appendingPathComponent(game.id.uuidString)
         if let folder = game.alternateSaveFolder { path.appendPathComponent(folder) }

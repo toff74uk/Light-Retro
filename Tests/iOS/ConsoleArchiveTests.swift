@@ -3,6 +3,36 @@ import ZIPFoundation
 @testable import LightRetro
 
 final class ConsoleArchiveTests: XCTestCase {
+    func testArcadeDiscAuditDistinguishesHeaderAndBIOSFailures() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let folder = root.appendingPathComponent("sfiii3")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let rom = root.appendingPathComponent("sfiii3.zip")
+        let zip = try Archive(url: rom, accessMode: .create)
+        try zip.addEntry(with: "sfiii3_euro.29f400.u2", type: .file, uncompressedSize: Int64(1),
+                         provider: { _, _ in Data([1]) })
+        let game = Game(title: "", system: .arcade, relativePath: "sfiii3.zip", folderID: UUID())
+        let digest = String(repeating: "11", count: 20)
+        let set = ArcadeDiscSet(parents: nil, discs: ["cap-33s-2": digest])
+        let missing = ArcadeFileCheck.report(game: game, archive: rom, set: set)
+        XCTAssertTrue(missing.contains("Expected BIOS missing or incorrect"))
+        XCTAssertTrue(missing.contains("Missing cap-33s-2.chd"))
+        let file = folder.appendingPathComponent("cap-33s-2.chd")
+        var header = Data(repeating: 0, count: 124)
+        header.replaceSubrange(0..<8, with: "MComprHD".utf8)
+        header[11] = 124
+        header[15] = 5
+        header.replaceSubrange(84..<104, with: Data(repeating: 0x11, count: 20))
+        try header.write(to: file)
+        XCTAssertTrue(ArcadeFileCheck.report(game: game, archive: rom, set: set).contains("Disc header matches MAME"))
+        header[84] = 0
+        try header.write(to: file)
+        XCTAssertTrue(ArcadeFileCheck.discResult(file, expected: digest).contains("Disc ID does not match"))
+        try header.prefix(100).write(to: file)
+        XCTAssertTrue(ArcadeFileCheck.discResult(file, expected: digest).contains("Incomplete CHD header"))
+    }
+
     func testExtractSingleROMAndRejectAmbiguity() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)

@@ -73,13 +73,17 @@ enum GameSystem: String, Codable, CaseIterable, Identifiable {
         case .scumm: return ["scumm", "scummvm"]
         }
     }
-    static func detect(rootName: String, relativePath: String) -> GameSystem? {
+    static func namedFolder(rootName: String, relativePath: String) -> GameSystem? {
         let parts = relativePath.split(separator: "/").dropLast().map(String.init)
         for name in ([rootName] + parts).reversed() {
             let key = name.lowercased().filter { $0.isLetter || $0.isNumber }
-            if let system = playable.first(where: { $0.aliases.contains(key) }) {
-                return recognises(relativePath, for: system) ? system : nil
-            }
+            if let system = playable.first(where: { $0.aliases.contains(key) }) { return system }
+        }
+        return nil
+    }
+    static func detect(rootName: String, relativePath: String) -> GameSystem? {
+        if let system = namedFolder(rootName: rootName, relativePath: relativePath) {
+            return recognises(relativePath, for: system) ? system : nil
         }
         let ext = (relativePath as NSString).pathExtension.lowercased()
         let system: GameSystem?
@@ -112,6 +116,11 @@ struct Game: Identifiable, Codable, Equatable {
     var localArtworkPath: String?
     // Older automatic-folder entries may already have save states from another core.
     var originalSaveSystem: GameSystem?
+    var hasMAMEDisc: Bool?
+    var isArcadeDiscCompanion: Bool?
+    mutating func preserveSaves(from previous: Game) {
+        originalSaveSystem = previous.originalSaveSystem ?? (previous.system == system ? nil : previous.system)
+    }
     var alternateSaveFolder: String? {
         guard let originalSaveSystem, originalSaveSystem != system else { return nil }
         return system.rawValue

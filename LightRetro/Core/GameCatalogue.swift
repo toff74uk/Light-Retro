@@ -11,6 +11,27 @@ struct GameCollection: Codable, Identifiable {
     }
 }
 
+struct ArcadeDiscSet: Decodable {
+    let parents: [String]?
+    // Filename without extension to MAME combined SHA-1. Clones can have aliases.
+    let discs: [String: String]
+
+    func locations(for name: String, beside archive: URL) -> [URL] {
+        let stem = archive.deletingPathExtension().lastPathComponent
+        let folders = [stem] + (stem == stem.lowercased() ? [] : [stem.lowercased()]) + (parents ?? [])
+        let base = archive.deletingLastPathComponent()
+        return folders.map { base.appendingPathComponent($0).appendingPathComponent(name + ".chd") }
+    }
+    func find(_ name: String, beside archive: URL) -> URL? {
+        locations(for: name, beside: archive).first {
+            (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+        }
+    }
+    func hasCompanion(beside archive: URL) -> Bool {
+        discs.keys.contains { find($0, beside: archive) != nil }
+    }
+}
+
 /// The Android 2.10 catalogues are bundled: arcade names never require an upload.
 final class GameCatalogue {
     static let shared = GameCatalogue()
@@ -19,6 +40,8 @@ final class GameCatalogue {
     static let fbneoBoards = ["CPS-1", "CPS-2", "CPS-3", "Neo Geo", "Other"]
     private let boardBySet: [String: String]
     private let buttonCountBySet: [String: Int]
+    let arcadeDiscs: [String: ArcadeDiscSet]
+    private let discNamesByFolder: [String: Set<String>]
     let collections: [GameCollection]
     private let descriptions: [String: String]
     init(directory: URL? = Bundle.main.resourceURL?.appendingPathComponent("Catalogue")) {
@@ -28,6 +51,15 @@ final class GameCatalogue {
         }
         mame = read("mame-titles.json", as: [String: [String]].self, fallback: [:])
         fbneo = read("fbneo-titles.json", as: [String: String].self, fallback: [:])
+        let discSets = read("arcade-discs.json", as: [String: ArcadeDiscSet].self, fallback: [:])
+        arcadeDiscs = discSets
+        var discNames: [String: Set<String>] = [:]
+        for (stem, set) in discSets {
+            for folder in [stem] + (set.parents ?? []) {
+                discNames[folder, default: []].formUnion(set.discs.keys.map { $0.lowercased() + ".chd" })
+            }
+        }
+        discNamesByFolder = discNames
         let buttonGroups = read("arcade-buttons.json", as: [String: [String]].self, fallback: [:])
         var counts: [String: Int] = [:]
         for (group, sets) in buttonGroups {
@@ -44,22 +76,40 @@ final class GameCatalogue {
         collections = read("collections.json", as: [GameCollection].self, fallback: [])
         descriptions = read("descriptions.json", as: [String: String].self, fallback: [:])
     }
+    func discSet(for game: Game) -> ArcadeDiscSet? {
+        game.system.isArcade ? arcadeDiscs[game.romStem.lowercased()] : nil
+    }
+    func isArcadeDisc(_ file: URL) -> Bool {
+        let folder = file.deletingLastPathComponent().lastPathComponent.lowercased()
+        return discNamesByFolder[folder]?.contains(file.lastPathComponent.lowercased()) == true
+    }
+
     func arcadeButtonCount(for game: Game) -> Int { buttonCountBySet[game.romStem.lowercased()] ?? 6 }
 
     func fbneoBoard(for game: Game) -> String? { boardBySet[game.romStem.lowercased()] }
 
-    func isListed(_ game: Game) -> Bool { game.system != .fbneo || fbneoBoard(for: game) != nil }
+    func isListed(_ game: Game) -> Bool {
+        game.isArcadeDiscCompanion != true && (game.system != .fbneo || fbneoBoard(for: game) != nil)
+    }
 
     func routeAutomaticArcade(_ game: inout Game) {
         guard game.system.isArcade, !boardBySet.isEmpty else { return }
-        game.system = fbneoBoard(for: game) == nil ? .arcade : .fbneo
+        game.system = game.hasMAMEDisc == true || fbneoBoard(for: game) == nil ? .arcade : .fbneo
     }
 
     func updateExistingArcadeRoutes(in library: inout LibraryData) {
-        let automatic = Set(library.folders.filter { $0.detectSystems == true }.map(\.id))
+        let automatic = Dictionary(library.folders.filter { $0.detectSystems == true }.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
         for index in library.games.indices {
             var game = library.games[index]
-            guard game.system.isArcade, let folder = game.folderID, automatic.contains(folder) else { continue }
+            guard let folder = game.folderID, let root = automatic[folder] else { continue }
+            if game.system == .pcecd, game.fileName.lowercased().hasSuffix(".chd") {
+                // Older mixed scans listed loose arcade discs as playable PC Engine CD titles.
+                let path = URL(fileURLWithPath: root, isDirectory: true).appendingPathComponent(game.relativePath)
+                let named = GameSystem.namedFolder(rootName: root, relativePath: game.relativePath)
+                if named != .pcecd && isArcadeDisc(path) { library.games[index].isArcadeDiscCompanion = true }
+                continue
+            }
+            guard game.system.isArcade else { continue }
             let previous = game.system
             routeAutomaticArcade(&game)
             if game.system != previous {

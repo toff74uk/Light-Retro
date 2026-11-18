@@ -15,6 +15,10 @@ struct PadButton {
     }
 }
 
+enum TouchStickMode: Equatable {
+    case analogue, directional, arcade
+}
+
 enum TouchPad {
     // MAME 0.289's default player-one assignments, in cabinet button order.
     static let mame = [0, 8, 1, 9, 10, 11]
