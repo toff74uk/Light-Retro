@@ -4,10 +4,11 @@ import UniformTypeIdentifiers
 struct DocumentPicker: UIViewControllerRepresentable {
     var folder: Bool = false
     var multiple: Bool = true
+    var contentTypes: [UTType] = [.data]
     var onPick: ([URL]) -> Void
     @Environment(\.dismiss) private var dismiss
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: folder ? [.folder] : [.data], asCopy: false)
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: folder ? [.folder] : contentTypes, asCopy: false)
         picker.allowsMultipleSelection = multiple && !folder
         picker.delegate = context.coordinator
         return picker

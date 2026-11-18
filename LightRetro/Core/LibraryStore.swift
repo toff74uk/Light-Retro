@@ -6,6 +6,8 @@ import UniformTypeIdentifiers
     @Published var data = LibraryData()
     @Published var error: String?
     @Published var busy = false
+    @Published var scanStatus = ""
+    @Published var artworkRevision = 0
     let root: URL
     private let fm = FileManager.default
     private var writable = true
@@ -19,7 +21,12 @@ import UniformTypeIdentifiers
         switch profile.theme { case "blue": return .cyan; case "pink": return .pink; case "yellow": return .yellow; default: return Color(red: 1, green: 0.38, blue: 0.15) }
     }
     init() {
+        #if DEBUG
+        let preview = ProcessInfo.processInfo.arguments.contains("--ui-preview")
+        root = preview ? fm.temporaryDirectory.appendingPathComponent("LightRetro-UITests") : fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        #else
         root = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        #endif
         do {
             for folder in [gamesURL, biosURL, savesURL, artworkURL] { try fm.createDirectory(at: folder, withIntermediateDirectories: true) }
             let file = root.appendingPathComponent("library.json")
@@ -28,10 +35,25 @@ import UniformTypeIdentifiers
                 guard decoded.version == 1 else { throw StoreError.message("This library needs a newer version of Light Retro.") }
                 data = decoded
                 if data.profiles.isEmpty { data.profiles = [PlayerProfile(name: "Player 1")] }
+                for i in data.games.indices where data.games[i].catalogueTitle == nil {
+                    data.games[i] = GameCatalogue.shared.identify(data.games[i])
+                }
             }
         } catch { writable = false; self.error = "Could not read your library. Your files are still in Files → Light Retro. \(error.localizedDescription)" }
+        #if DEBUG
+        if preview {
+            writable = false // The UI fixture never writes a real user library.
+            data = LibraryData(); data.downloadArtwork = false
+            data.games = [Game(title: "", system: .arcade, relativePath: "sf2.zip"), Game(title: "", system: .arcade, relativePath: "dkong.zip"), Game(title: "", system: .n64, relativePath: "Super Mario 64 (USA).z64"), Game(title: "", system: .snes, relativePath: "Super Mario World (USA).sfc"), Game(title: "", system: .mega, relativePath: "Sonic the Hedgehog (USA).md")].map { GameCatalogue.shared.identify($0) }
+            data.profiles[0].name = "Player 1"
+            data.profiles[0].favourites.insert(data.games[0].id)
+        }
+        #endif
     }
     func persist() {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-preview") { return }
+        #endif
         guard writable else { error = "Your existing library could not be read. Back up library.json in Files before repairing it; it has not been overwritten."; return }
         do { try JSONEncoder().encode(data).write(to: root.appendingPathComponent("library.json"), options: .atomic) }
         catch { self.error = "Could not save the library: \(error.localizedDescription)" }
@@ -64,45 +86,81 @@ import UniformTypeIdentifiers
                 }
                 if let e = coordinationError { throw e }
                 if let e = copyError { throw e }
-                data.games.append(Game(id: id, title: LibraryRules.displayName(url.lastPathComponent), system: system, relativePath: relative))
+                data.games.append(GameCatalogue.shared.identify(Game(id: id, title: "", system: system, relativePath: relative)))
                 persist()
             }
         } catch { self.error = error.localizedDescription }
     }
-    func linkFolder(_ url: URL, system: GameSystem) {
+    func linkFolder(_ url: URL, system: GameSystem?) {
+        guard !busy else { return }
         do {
             let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
             let bookmark = try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
-            if let existing = data.folders.first(where: { folder in
-                guard folder.system == system else { return false }
+            let existing = data.folders.first { folder in
+                guard (folder.detectSystems == true) == (system == nil), system == nil || folder.system == system else { return false }
                 var stale = false
                 return (try? URL(resolvingBookmarkData: folder.bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale))?.standardizedFileURL == url.standardizedFileURL
-            }) { try scan(existing, url: url); persist(); return }
-            let folder = GameFolder(name: url.lastPathComponent, system: system, bookmark: bookmark)
-            try scan(folder, url: url); data.folders.append(folder); persist()
+            }
+            let folder = existing ?? GameFolder(name: url.lastPathComponent, system: system ?? .arcade, bookmark: bookmark, detectSystems: system == nil)
+            busy = true; scanStatus = "Scanning \(folder.name)…"
+            Task {
+                defer { busy = false }
+                do {
+                    let result = try await Task.detached(priority: .userInitiated) { try FolderScanner.scan(folder: folder, root: url) }.value
+                    let added = FolderScanner.merge(result.games, into: &data.games)
+                    if existing == nil { data.folders.append(folder) }
+                    persist()
+                    scanStatus = "\(result.games.count) games found · \(added) added · \(result.ignored) support or unsupported files skipped"
+                    if result.games.isEmpty { scanStatus += ". Try selecting a specific system, or make cloud files available in Files first." }
+                } catch { self.error = "Could not scan \(folder.name): \(error.localizedDescription)"; scanStatus = "Scan failed · existing games and saves kept" }
+            }
         } catch { self.error = error.localizedDescription }
     }
-    private func scan(_ folder: GameFolder, url: URL) throws {
-        var scanError: Error?
-        guard let files = fm.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey], options: [.skipsHiddenFiles], errorHandler: { _, e in scanError = e; return false }) else { throw StoreError.message("Could not open this folder.") }
-        for case let file as URL in files {
-            let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-            guard values.isSymbolicLink != true, values.isRegularFile == true else { continue }
-            let relative = String(file.path.dropFirst(url.path.count + 1))
-            guard LibraryRules.safeRelativePath(relative), GameSystem.recognises(relative, for: folder.system) else { continue }
-            LibraryRules.upsert(Game(title: LibraryRules.displayName(file.lastPathComponent), system: folder.system, relativePath: relative, folderID: folder.id), in: &data.games)
-        }
-        if let scanError { throw scanError }
-    }
     func rescan() {
-        do {
+        guard !busy else { return }
+        busy = true
+        Task {
+            defer { busy = false }
+            var added = 0, found = 0, failures: [String] = []
             for folder in data.folders {
-                let url = try resolve(folder)
-                let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
-                try scan(folder, url: url)
+                scanStatus = "Scanning \(folder.name)…"
+                do {
+                    let url = try resolve(folder)
+                    let result = try await Task.detached(priority: .userInitiated) { try FolderScanner.scan(folder: folder, root: url) }.value
+                    added += FolderScanner.merge(result.games, into: &data.games); found += result.games.count
+                } catch { failures.append(folder.name + ": " + error.localizedDescription) }
             }
-            persist()
-        } catch { self.error = "Rescan stopped: \(error.localizedDescription)" }
+            persist(); scanStatus = "\(found) games found · \(added) added"
+            if !failures.isEmpty { error = "Some folders are unavailable. Existing games and saves have been kept.\n" + failures.joined(separator: "\n") }
+        }
+    }
+    func refreshTitles() {
+        for i in data.games.indices {
+            // Linked metadata is refreshed by rescanning, preserving gamelist.xml titles.
+            if data.games[i].folderID == nil { data.games[i] = GameCatalogue.shared.identify(data.games[i]) }
+        }
+        persist(); rescan()
+    }
+    func artworkRoot(for game: Game) -> URL? {
+        if let id = game.folderID, let folder = data.folders.first(where: { $0.id == id }) { return try? resolve(folder) }
+        return gamesURL
+    }
+    func editTitle(_ game: Game, title: String) {
+        guard let index = data.games.firstIndex(where: { $0.id == game.id }) else { return }
+        let value = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        data.games[index].customTitle = value.isEmpty ? nil : String(value.prefix(160))
+        persist(); artworkRevision += 1
+    }
+    func importArtwork(_ url: URL, for game: Game) {
+        guard let index = data.games.firstIndex(where: { $0.id == game.id }) else { return }
+        let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
+        do {
+            guard let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 20_000_000,
+                  let image = ArtworkLoader.thumbnail(try Data(contentsOf: url)) else { throw StoreError.message("Choose a PNG, JPEG or HEIC image smaller than 20 MB.") }
+            let name = UUID().uuidString + ".jpg"
+            try image.write(to: artworkURL.appendingPathComponent(name), options: .atomic)
+            data.games[index].artwork = name; persist(); artworkRevision += 1
+        } catch { self.error = error.localizedDescription }
     }
     private func resolve(_ folder: GameFolder) throws -> URL {
         var stale = false
@@ -124,6 +182,7 @@ import UniformTypeIdentifiers
         } else { base = gamesURL }
         let access = GameAccess(root: base, path: game.relativePath)
         guard fm.fileExists(atPath: access.url.path) else { throw StoreError.message("This game is unavailable. Reconnect its drive or download it in Files, then try again.") }
+        try access.prepareConsoleZIP(for: game.system)
         return access
     }
     func saveDirectory(for game: Game) throws -> URL {
@@ -149,10 +208,17 @@ import UniformTypeIdentifiers
 
 final class GameAccess {
     let root: URL
-    let url: URL
+    private(set) var url: URL
+    private var temporary: URL?
     private let scoped: Bool
     init(root: URL, path: String) { self.root = root; url = root.appendingPathComponent(path); scoped = root.startAccessingSecurityScopedResource() }
-    deinit { if scoped { root.stopAccessingSecurityScopedResource() } }
+    func prepareConsoleZIP(for system: GameSystem) throws {
+        guard !system.isArcade, url.pathExtension.lowercased() == "zip" else { return }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("LightRetro-" + UUID().uuidString, isDirectory: true)
+        do { url = try ConsoleArchive.extract(url, system: system, destination: directory); temporary = directory }
+        catch { try? FileManager.default.removeItem(at: directory); throw error }
+    }
+    deinit { if scoped { root.stopAccessingSecurityScopedResource() }; if let temporary { try? FileManager.default.removeItem(at: temporary) } }
 }
 enum StoreError: LocalizedError {
     case message(String)

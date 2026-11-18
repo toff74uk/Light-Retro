@@ -1,0 +1,10 @@
+Light Retro Android 2.10 catalogue and interface provenance
+
+mame-titles.json (31,122 entries) and fbneo-titles.json (8,436 entries) were copied without changes from the user's Light-Retro-2.10-Full-Source.zip, app/src/main/assets.
+collections.json reproduces the sets in MameCollections.kt and SnesCollections.kt.
+descriptions.json reproduces the short descriptions in GameDescriptions.kt.
+The iPhone landscape library, palette and settings board follow MainActivity.kt and RetroAppearance.kt from that same Android source.
+
+Game titles, publishers and related marks belong to their respective owners. No ROM or BIOS images are bundled.
+Optional artwork is requested from the separate Libretro thumbnail service. Artwork rights remain with the respective owners; the application does not bundle those cover images.
+https://github.com/libretro-thumbnails/libretro-thumbnails

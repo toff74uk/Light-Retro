@@ -9,7 +9,7 @@ if os.environ.get('INCLUDE_CORES')=='1':
         name=core['name']; framework=root/'Frameworks'/f'{name}.framework'
         if not (framework/name).is_file(): raise SystemExit(f'Missing required core: {name}')
         entries.append(f'      - framework: Frameworks/{name}.framework\n        embed: true\n        codeSign: true\n        link: false')
-    spec=spec.replace('    dependencies:\n', '    dependencies:\n'+'\n'.join(entries)+'\n')
+    spec=spec.replace('    dependencies:\n', '    dependencies:\n'+'\n'.join(entries)+'\n', 1)
 for key,default in [('BUNDLE_ID','com.lightretro.app'),('TEAM_ID',''),('BUILD_NUMBER','1')]:
     spec=spec.replace('${'+key+'}',os.environ.get(key) or default)
 generated=root/'project.generated.yml'; generated.write_text(spec)

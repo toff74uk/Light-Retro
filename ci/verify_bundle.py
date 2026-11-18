@@ -29,6 +29,10 @@ def verify_bundle(app, signed=False):
         assert result == 'arm64', result
         if signed:
             subprocess.run(['codesign', '--verify', '--strict', str(fw)], check=True)
+    catalogue = app / 'Catalogue'
+    assert len(json.loads((catalogue / 'mame-titles.json').read_text())) == 31122, 'Missing Android MAME names'
+    assert len(json.loads((catalogue / 'fbneo-titles.json').read_text())) == 8436, 'Missing Android FBNeo names'
+    assert len(json.loads((catalogue / 'collections.json').read_text())) == 9, 'Missing curated collections'
     assert (app / 'PrivacyInfo.xcprivacy').is_file(), 'Missing privacy manifest'
     assert (app / 'Licenses').is_dir(), 'Missing licences'
     if signed:

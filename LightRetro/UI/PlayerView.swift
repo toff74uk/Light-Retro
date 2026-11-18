@@ -75,7 +75,7 @@ struct PlayerView: View {
                     HStack {
                         Button { input.clear(); session.pause() } label: { Image(systemName: "pause.circle.fill").font(.title) }.accessibilityLabel("Pause game")
                         Spacer()
-                        Text(game.title).font(.caption).lineLimit(1)
+                        Text(game.displayTitle).font(.caption).lineLimit(1)
                         Spacer()
                         Button { showControls.toggle(); input.clear() } label: { Image(systemName: "gamecontroller").font(.title2) }.accessibilityLabel("Show or hide touch controls")
                     }.foregroundStyle(.white).padding(.horizontal, 18).padding(.vertical, 6)
@@ -105,7 +105,7 @@ struct PlayerView: View {
     private var pauseMenu: some View {
         ScrollView {
             VStack(spacing: 14) {
-                Text(game.title).font(.title3.bold()).multilineTextAlignment(.center)
+                Text(game.displayTitle).font(.title3.bold()).multilineTextAlignment(.center)
                 Text(session.loaded ? "Take a breather." : "Getting ready…").font(.caption).foregroundStyle(.secondary)
                 if session.loaded {
                     if session.hasResume { Button("Resume saved game") { session.restoreAutomatic() }.buttonStyle(.borderedProminent) }
