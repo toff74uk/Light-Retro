@@ -94,3 +94,5 @@ legacy["profiles"] = (legacy["profiles"] as! [[String: Any]]).map { record in re
 let migrated = try JSONDecoder().decode(LibraryData.self, from: JSONSerialization.data(withJSONObject: legacy))
 check(migrated.profiles[0].favourites.contains(game.id) && migrated.games[0].id == game.id, "Old library compatibility preserves favourites and saves")
 print("Folder, title, artwork matching and migration tests passed")
+
+check(LibraryRules.displayName("Example (Ultimate Edition).nes") == "Example (Ultimate Edition)", "A title word starting with a region letter is not a dump tag")

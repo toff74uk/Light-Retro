@@ -159,7 +159,7 @@ enum LibraryRules {
     static func displayName(_ filename: String) -> String {
         let stem = ((filename as NSString).lastPathComponent as NSString).deletingPathExtension
         let clean = stem.replacingOccurrences(of: "_", with: " ")
-            .replacingOccurrences(of: #"\s*\((?:USA|Europe|Japan|World|U|E|J|Rev\b|En\b|Proto\b|Beta\b)[^)]*\)"#, with: "", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: #"\s*\((?:USA|US|Europe|Japan|World|U|E|J|Rev|En|Proto|Beta)\b[^)]*\)"#, with: "", options: [.regularExpression, .caseInsensitive])
             .replacingOccurrences(of: #"\s*\[[^\]]*\]"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
         return clean.isEmpty ? stem : clean
