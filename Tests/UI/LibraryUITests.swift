@@ -8,7 +8,7 @@ final class LibraryUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["add-folder"].waitForExistence(timeout: 20))
         app.buttons["game-sf2"].tap()
-        XCTAssertTrue(app.staticTexts["selected-title"].label.contains("Street Fighter II"))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "selected-title", "Street Fighter II")).firstMatch.waitForExistence(timeout: 5))
         attach("Library-landscape")
         app.buttons["add-folder"].tap()
         XCTAssertTrue(app.buttons["choose-folder"].waitForExistence(timeout: 5))

@@ -25,11 +25,11 @@ final class ConsoleArchiveTests: XCTestCase {
         defer { try? fm.removeItem(at: root) }
         let file = root.appendingPathComponent("unsafe.zip")
         let archive = try Archive(url: file, accessMode: .create)
-        try archive.addEntry(with: "../escape.nes", type: .file, uncompressedSize: 1, provider: { _, _ in Data([1]) })
+        try archive.addEntry(with: "../escape.nes", type: .file, uncompressedSize: Int64(1), provider: { _, _ in Data([1]) })
         XCTAssertThrowsError(try ConsoleArchive.extract(file, system: .nes, destination: root.appendingPathComponent("out")))
         let good = root.appendingPathComponent("good.zip")
         let safeArchive = try Archive(url: good, accessMode: .create)
-        try safeArchive.addEntry(with: "game.nes", type: .file, uncompressedSize: 1, provider: { _, _ in Data([1]) })
+        try safeArchive.addEntry(with: "game.nes", type: .file, uncompressedSize: Int64(1), provider: { _, _ in Data([1]) })
         var access: GameAccess? = GameAccess(root: root, path: "good.zip")
         try access?.prepareConsoleZIP(for: .nes)
         let extracted = try XCTUnwrap(access?.url)
