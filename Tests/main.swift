@@ -74,7 +74,7 @@ let linked = GameFolder(name: "ROMs", system: .arcade, bookmark: Data(), detectS
 let result = try FolderScanner.scan(folder: linked, root: temp, catalogue: catalogue)
 check(result.games.count == 3, "Recursive scan skips artwork, BIOS, CHDs and unsupported files")
 let snes = result.games.first { $0.system == .snes }!
-check(snes.title == "My proper title" && snes.summary == "A & B" && snes.localArtworkPath == "SNES/images/cover.png", "Read local gamelist metadata")
+check(snes.title == "My proper title" && snes.summary == "A & B" && snes.localArtworkPath == "SNES/images/cover.png", "Read local gamelist metadata: \(snes); parsed: \(GamelistReader.read(temp.appendingPathComponent("SNES/gamelist.xml"), root: temp))")
 check(snes.year == "1990" && snes.maker == "Studio", "Read gamelist maker and year")
 var prior = result.games
 prior[0].customTitle = "My saved edit"; prior[0].artwork = "custom.jpg"

@@ -24,7 +24,10 @@ enum FolderScanner {
             if values.isDirectory == true && ["bios", "system", "support", "artwork", "covers", "images", "media", "saves"].contains(file.lastPathComponent.lowercased()) { enumerator.skipDescendants(); continue }
             guard values.isRegularFile == true else { continue }
             if file.lastPathComponent.lowercased() == "gamelist.xml" { lists.append(file); continue }
-            let relative = String(file.path.dropFirst(root.path.count + 1))
+            let rootParts = root.standardizedFileURL.pathComponents
+            let fileParts = file.standardizedFileURL.pathComponents
+            guard fileParts.starts(with: rootParts) else { continue }
+            let relative = fileParts.dropFirst(rootParts.count).joined(separator: "/")
             guard LibraryRules.safeRelativePath(relative) else { continue }
             let system = folder.detectSystems == true ? GameSystem.detect(rootName: root.lastPathComponent, relativePath: relative) : folder.system
             guard let system, GameSystem.recognises(relative, for: system) else { ignored += 1; continue }
@@ -84,9 +87,9 @@ final class GamelistReader: NSObject, XMLParserDelegate {
     private func relative(_ text: String) -> String? {
         guard !text.isEmpty, !text.hasPrefix("/"), !text.contains("://"), !text.contains("\\") else { return nil }
         let target = directory.appendingPathComponent(text).standardizedFileURL.resolvingSymlinksInPath()
-        let base = root.standardizedFileURL.resolvingSymlinksInPath().path + "/"
-        guard target.path.hasPrefix(base) else { return nil }
-        let path = String(target.path.dropFirst(base.count))
+        let base = root.standardizedFileURL.resolvingSymlinksInPath().pathComponents
+        guard target.pathComponents.starts(with: base) else { return nil }
+        let path = target.pathComponents.dropFirst(base.count).joined(separator: "/")
         return LibraryRules.safeRelativePath(path) ? path : nil
     }
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String]) {
