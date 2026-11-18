@@ -21,9 +21,12 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(third.waitForExistence(timeout: 5))
         XCTAssertFalse(sixth.exists)
         XCUIDevice.shared.orientation = .portrait
-        XCTAssertTrue(layout.isHittable)
+        // A native tap synchronises with the rotation animation. Verify it
+        // actually opens the menu and changes the visible gameplay buttons.
         layout.tap()
-        app.buttons["Automatic (6 buttons)"].tap()
+        let automatic = app.buttons["Automatic (6 buttons)"]
+        XCTAssertTrue(automatic.waitForExistence(timeout: 5))
+        automatic.tap()
         XCTAssertTrue(sixth.waitForExistence(timeout: 5))
         attach("Arcade-six-buttons-portrait")
         XCUIDevice.shared.orientation = .landscapeLeft
