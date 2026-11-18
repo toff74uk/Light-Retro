@@ -83,18 +83,19 @@ struct PlayerView: View {
     }
     private var buttons: Int { store.profile.touchButtonOverride(for: game) ?? automaticButtons }
     private var layoutMenu: some View {
-        let selection = Binding<Int>(
-            get: { store.profile.touchButtonOverride(for: game) ?? 0 },
-            set: { count in
-                input.clear()
-                session.engine.clearButtons()
-                store.updateProfile { $0.setTouchButtonOverride(count == 0 ? nil : count, for: game) }
-            }
-        )
+        let selected = store.profile.touchButtonOverride(for: game)
         return Menu {
-            Picker("Layout for this game", selection: selection) {
-                Text("Automatic (\(automaticButtons) buttons)").tag(0)
-                ForEach(2...6, id: \.self) { count in Text("\(count) buttons").tag(count) }
+            ForEach([0, 2, 3, 4, 5, 6], id: \.self) { count in
+                let title = count == 0 ? "Automatic (\(automaticButtons) buttons)" : "\(count) buttons"
+                Button {
+                    input.clear()
+                    session.engine.clearButtons()
+                    store.updateProfile { $0.setTouchButtonOverride(count == 0 ? nil : count, for: game) }
+                    showControls = true
+                } label: {
+                    if count == (selected ?? 0) { Label(title, systemImage: "checkmark") }
+                    else { Text(title) }
+                }
             }
         } label: {
             Label("Layout · \(buttons)", systemImage: "circle.grid.2x2.fill")
@@ -117,7 +118,7 @@ struct PlayerView: View {
                         Spacer()
                         Text(game.displayTitle).font(.caption).lineLimit(1)
                         Spacer()
-                        if game.system.isArcade && showControls { layoutMenu }
+                        if game.system.isArcade { layoutMenu }
                         Button { showControls.toggle(); input.clear() } label: { Image(systemName: "gamecontroller").font(.title2) }.accessibilityLabel("Show or hide touch controls")
                     }.foregroundStyle(.white).padding(.horizontal, 18).padding(.vertical, 6)
                     ZStack {
@@ -303,6 +304,7 @@ private struct TouchLayout: View {
             }
             .frame(width: step, height: step)
             .overlay { TouchButtonSurface(change: change) }
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(system.isArcade ? "Button " + button.label : button.label)
             .accessibilityAddTraits(.isButton).accessibilityIdentifier("pad-" + button.label)
             .onDisappear { change(false) }

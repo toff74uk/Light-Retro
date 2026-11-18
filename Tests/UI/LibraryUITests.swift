@@ -11,17 +11,24 @@ final class LibraryUITests: XCTestCase {
         fighter.tap()
         app.buttons["play-selected"].tap()
         app.buttons["Continue playing"].tap()
-        let layout = app.buttons["arcade-layout"]
-        XCTAssertTrue(layout.waitForExistence(timeout: 5))
-        XCTAssertEqual(layout.value as? String, "6 buttons")
+        let layout = app.descendants(matching: .any).matching(identifier: "arcade-layout").firstMatch
+        XCTAssertTrue(layout.waitForExistence(timeout: 8))
         layout.tap()
+        XCTAssertTrue(app.buttons["Automatic (6 buttons)"].exists)
         app.buttons["3 buttons"].tap()
-        XCTAssertEqual(layout.value as? String, "3 buttons")
+        let third = app.descendants(matching: .any).matching(identifier: "pad-3").firstMatch
+        let sixth = app.descendants(matching: .any).matching(identifier: "pad-6").firstMatch
+        XCTAssertTrue(third.waitForExistence(timeout: 5))
+        XCTAssertFalse(sixth.exists)
         XCUIDevice.shared.orientation = .portrait
         XCTAssertTrue(layout.isHittable)
         layout.tap()
         app.buttons["Automatic (6 buttons)"].tap()
-        XCTAssertEqual(layout.value as? String, "6 buttons")
+        XCTAssertTrue(sixth.waitForExistence(timeout: 5))
+        attach("Arcade-six-buttons-portrait")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(sixth.isHittable)
+        attach("Arcade-six-buttons-landscape")
     }
 
     func testPauseExitStaysVisibleAndCanBeCancelled() {
