@@ -109,6 +109,7 @@ import UniformTypeIdentifiers
                     let result = try await Task.detached(priority: .userInitiated) { try FolderScanner.scan(folder: folder, root: url) }.value
                     let added = FolderScanner.merge(result.games, into: &data.games)
                     if existing == nil { data.folders.append(folder) }
+                    await ArtworkLoader.shared.retryMissing(); artworkRevision += 1
                     persist()
                     scanStatus = "\(result.games.count) games found · \(added) added · \(result.ignored) support or unsupported files skipped"
                     if result.games.isEmpty { scanStatus += ". Try selecting a specific system, or make cloud files available in Files first." }
@@ -130,6 +131,7 @@ import UniformTypeIdentifiers
                     added += FolderScanner.merge(result.games, into: &data.games); found += result.games.count
                 } catch { failures.append(folder.name + ": " + error.localizedDescription) }
             }
+            await ArtworkLoader.shared.retryMissing(); artworkRevision += 1
             persist(); scanStatus = "\(found) games found · \(added) added"
             if !failures.isEmpty { error = "Some folders are unavailable. Existing games and saves have been kept.\n" + failures.joined(separator: "\n") }
         }

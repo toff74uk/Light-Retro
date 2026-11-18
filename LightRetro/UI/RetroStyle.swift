@@ -29,7 +29,7 @@ struct GameArtwork: View {
             else { Image("system_\(game.system.rawValue)").resizable().scaledToFit().padding(7).opacity(0.85) }
         }
         .accessibilityLabel("\(game.displayTitle) artwork")
-        .task(id: "\(game.id)|\(game.customTitle ?? "")|\(game.artwork ?? "")|\(store.artworkRevision)|\(store.data.downloadArtwork ?? true)") {
+        .task(id: "\(game.id)|\(game.customTitle ?? "")|\(game.catalogueTitle ?? "")|\(game.localArtworkPath ?? "")|\(game.artwork ?? "")|\(store.artworkRevision)|\(store.data.downloadArtwork ?? true)") {
             picture = nil
             let data = await ArtworkLoader.shared.load(game, root: store.artworkRoot(for: game), manual: game.artwork.map { store.artworkURL.appendingPathComponent($0) }, downloads: store.data.downloadArtwork ?? true)
             if !Task.isCancelled { picture = data.flatMap { UIImage(data: $0) } }

@@ -52,7 +52,12 @@ jobs:
             -destination "platform=iOS Simulator,id=$DEVICE" -resultBundlePath build/UITests.xcresult \
             -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
             > simulator.log 2>&1 || { grep -E 'error:|failed|Failure' simulator.log | tail -60; tail -50 simulator.log; exit 1; }
-          xcrun xcresulttool export attachments --path build/UITests.xcresult --output-path build/screenshots
+      - name: Export native screenshots
+        if: always()
+        run: |
+          if [ -d build/UITests.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/UITests.xcresult --output-path build/screenshots
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

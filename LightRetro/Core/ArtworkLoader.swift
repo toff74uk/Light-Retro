@@ -22,7 +22,7 @@ actor ArtworkLoader {
     }
     private func acquire() async { if active < 3 { active += 1 } else { await withCheckedContinuation { waiting.append($0) } } }
     private func release() { if waiting.isEmpty { active -= 1 } else { waiting.removeFirst().resume() } }
-    func retryMissing() { missing.removeAll() }
+    func retryMissing() { missing.removeAll(); memory.removeAllObjects() }
     nonisolated static func thumbnail(_ data: Data) -> Data? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil), let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = properties[kCGImagePropertyPixelWidth] as? Int, let height = properties[kCGImagePropertyPixelHeight] as? Int,
@@ -75,10 +75,10 @@ actor ArtworkLoader {
                 for ext in ["png", "jpg", "jpeg"] { paths.append((dir.isEmpty ? "" : dir + "/") + name + "." + ext) }
             }
         }
-        let base = root.resolvingSymlinksInPath().standardizedFileURL.path + "/"
+        let base = root.resolvingSymlinksInPath().standardizedFileURL.pathComponents
         for path in paths where LibraryRules.safeRelativePath(path) {
             let url = root.appendingPathComponent(path).resolvingSymlinksInPath().standardizedFileURL
-            guard url.path.hasPrefix(base), let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size < 20_000_000,
+            guard url.pathComponents.starts(with: base), let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size < 20_000_000,
                   let bytes = try? Data(contentsOf: url), let image = Self.thumbnail(bytes) else { continue }
             return image
         }

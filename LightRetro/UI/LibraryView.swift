@@ -249,7 +249,7 @@ struct LibraryView: View {
     private func resetSelection() { page = 0; selected = games.first?.id; lastInteraction = Date() }
     private func reconcileSelection() { if !games.contains(where: { $0.id == selected }) { resetSelection() }; page = min(page, pageCount - 1) }
     private func changePage(_ delta: Int) { page = min(max(0, page + delta), pageCount - 1); selected = pageGames.first?.id; focus = 2 }
-    private func launch(_ game: Game) { controllers.onMenuInput = nil; playing = game }
+    private func launch(_ game: Game) { guard game.system.core != nil else { store.error = game.system.help; return }; controllers.onMenuInput = nil; playing = game }
     private func installMenuControls() {
         lastInteraction = Date(); reconcileSelection()
         controllers.onGameInput = nil; controllers.onPause = nil; controllers.analogueGameplay = false
