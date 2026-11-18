@@ -16,6 +16,8 @@ final class GameCatalogue {
     static let shared = GameCatalogue()
     let mame: [String: [String]]
     let fbneo: [String: String]
+    static let fbneoBoards = ["CPS-1", "CPS-2", "CPS-3", "Neo Geo", "Other"]
+    private let boardBySet: [String: String]
     let collections: [GameCollection]
     private let descriptions: [String: String]
     init(directory: URL? = Bundle.main.resourceURL?.appendingPathComponent("Catalogue")) {
@@ -25,8 +27,36 @@ final class GameCatalogue {
         }
         mame = read("mame-titles.json", as: [String: [String]].self, fallback: [:])
         fbneo = read("fbneo-titles.json", as: [String: String].self, fallback: [:])
+        let boards = read("fbneo-boards.json", as: [String: [String]].self, fallback: [:])
+        var boardBySet: [String: String] = [:]
+        for (board, names) in boards {
+            for name in names { boardBySet[name] = board }
+        }
+        self.boardBySet = boardBySet
         collections = read("collections.json", as: [GameCollection].self, fallback: [])
         descriptions = read("descriptions.json", as: [String: String].self, fallback: [:])
+    }
+    func fbneoBoard(for game: Game) -> String? { boardBySet[game.romStem.lowercased()] }
+
+    func isListed(_ game: Game) -> Bool { game.system != .fbneo || fbneoBoard(for: game) != nil }
+
+    func routeAutomaticArcade(_ game: inout Game) {
+        guard game.system.isArcade, !boardBySet.isEmpty else { return }
+        game.system = fbneoBoard(for: game) == nil ? .arcade : .fbneo
+    }
+
+    func updateExistingArcadeRoutes(in library: inout LibraryData) {
+        let automatic = Set(library.folders.filter { $0.detectSystems == true }.map(\.id))
+        for index in library.games.indices {
+            var game = library.games[index]
+            guard game.system.isArcade, let folder = game.folderID, automatic.contains(folder) else { continue }
+            let previous = game.system
+            routeAutomaticArcade(&game)
+            if game.system != previous {
+                game.originalSaveSystem = game.originalSaveSystem ?? previous
+                library.games[index] = game
+            }
+        }
     }
     func identify(_ source: Game) -> Game {
         var game = source

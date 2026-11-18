@@ -45,7 +45,7 @@ enum GameSystem: String, Codable, CaseIterable, Identifiable {
         case .arcade: return "Use MAME 0.289 sets. Link the complete arcade folder so parent and BIOS ZIPs stay together; keep each CHD in its matching game subfolder. Start the game ZIP, not the CHD."
         case .n64: return "Use .z64, .n64 or .v64 ROMs, or a ZIP containing one ROM. Left stick moves, right stick controls C buttons, left trigger is Z. Runs without JIT; demanding games may be slow."
         case .scumm: return "SCUMM engine and pointer controls are planned for a later build."
-        case .fbneo: return "Use a matching FBNeo ROM set. Keep parent sets and required BIOS ZIPs in the same linked folder."
+        case .fbneo: return "Only arcade set names on Light Retro Android’s FBNeo list appear here. Keep the original archive names and place parent sets and BIOS ZIPs beside the games."
         case .pcecd: return "Link a folder containing your disc and all its tracks. Import your syscard3.pce BIOS in Settings."
         default: return "Add ROMs or ZIPs containing one game. Folder contents stay in place; a zipped console game is temporarily unpacked when played."
         }
@@ -110,6 +110,12 @@ struct Game: Identifiable, Codable, Equatable {
     var summary: String?
     var customTitle: String?
     var localArtworkPath: String?
+    // Older automatic-folder entries may already have save states from another core.
+    var originalSaveSystem: GameSystem?
+    var alternateSaveFolder: String? {
+        guard let originalSaveSystem, originalSaveSystem != system else { return nil }
+        return system.rawValue
+    }
     var fileName: String { (relativePath as NSString).lastPathComponent }
     var romStem: String { (fileName as NSString).deletingPathExtension }
     var displayTitle: String { customTitle ?? title }
@@ -149,6 +155,19 @@ struct LibraryData: Codable {
     var profiles = [PlayerProfile(name: "Player 1")]
     var currentProfile: UUID?
     var downloadArtwork: Bool?
+}
+
+struct LibraryPage {
+    static let size = 200
+    let count: Int
+    let index: Int
+    let games: ArraySlice<Game>
+
+    init(_ results: [Game], index requestedIndex: Int) {
+        count = max(1, (results.count + Self.size - 1) / Self.size)
+        index = min(max(0, requestedIndex), count - 1)
+        games = results.dropFirst(index * Self.size).prefix(Self.size)
+    }
 }
 
 enum LibraryRules {

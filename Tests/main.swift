@@ -96,3 +96,58 @@ check(migrated.profiles[0].favourites.contains(game.id) && migrated.games[0].id 
 print("Folder, title, artwork matching and migration tests passed")
 
 check(LibraryRules.displayName("Example (Ultimate Edition).nes") == "Example (Ultimate Edition)", "A title word starting with a region letter is not a dump tag")
+
+let boardExamples = ["sf2": "CPS-1", "sf2ce": "CPS-1", "ssf2t": "CPS-2", "sfiii3": "CPS-3",
+                     "mslug": "Neo Geo", "tnzs": "Other", "ddonpach": "Other"]
+for (stem, board) in boardExamples {
+    let candidate = Game(title: "Custom title", system: .fbneo, relativePath: "nested/" + stem.uppercased() + ".7Z")
+    check(catalogue.isListed(candidate) && catalogue.fbneoBoard(for: candidate) == board, "Android board and clone routing")
+}
+check(catalogue.fbneo["pacman"] != nil, "The FBNeo title catalogue includes games outside Android's preferred list")
+let allPreferred = catalogue.fbneo.keys.filter { stem in
+    catalogue.isListed(Game(title: "", system: .fbneo, relativePath: stem + ".zip"))
+}
+check(allPreferred.count == 1839, "Use Android's preferred set list")
+let arcadeRoot = temp.appendingPathComponent("Shared arcade")
+for name in ["SF2CE.7Z", "tnzs.zip", "pacman.zip", "sf2_unknown.zip", "neogeo.zip"] {
+    try fixture("Shared arcade/" + name)
+}
+let fbFolder = GameFolder(name: "FinalBurn", system: .fbneo, bookmark: Data())
+let fbScan = try FolderScanner.scan(folder: fbFolder, root: arcadeRoot, catalogue: catalogue)
+check(Set(fbScan.games.map(\.fileName)) == ["SF2CE.7Z", "tnzs.zip"] && fbScan.ignored == 3, "Explicit FBNeo folder shows exact Android matches only")
+let mameFolder = GameFolder(name: "MAME", system: .arcade, bookmark: Data())
+let mameScan = try FolderScanner.scan(folder: mameFolder, root: arcadeRoot, catalogue: catalogue)
+check(mameScan.games.count == 4 && mameScan.games.allSatisfy { $0.system == .arcade }, "Explicit MAME selection is preserved")
+let autoScan = try FolderScanner.scan(folder: linked, root: arcadeRoot, catalogue: catalogue)
+check(Set(autoScan.games.filter { $0.system == .fbneo }.map(\.fileName)) == Set(fbScan.games.map(\.fileName)), "Shared folders route preferred archives to FBNeo")
+check(Set(autoScan.games.filter { $0.system == .arcade }.map(\.fileName)) == ["pacman.zip", "sf2_unknown.zip"], "Remaining archives use MAME")
+
+var previous = LibraryData()
+previous.folders = [linked, fbFolder, mameFolder]
+let oldMame = Game(title: "Custom", system: .arcade, relativePath: "SF2CE.7Z", folderID: linked.id, artwork: "custom.png", customTitle: "My SF2")
+let oldFB = Game(title: "Pac-Man", system: .fbneo, relativePath: "pacman.zip", folderID: linked.id)
+let rejected = Game(title: "Street Fighter II", system: .fbneo, relativePath: "sf2_unknown.zip", folderID: fbFolder.id)
+let manual = Game(title: "Street Fighter II", system: .arcade, relativePath: "sf2.zip", folderID: mameFolder.id)
+previous.games = [oldMame, oldFB, rejected, manual]
+previous.profiles[0].favourites = [oldMame.id, rejected.id]
+catalogue.updateExistingArcadeRoutes(in: &previous)
+catalogue.updateExistingArcadeRoutes(in: &previous)
+check(previous.games[0].system == .fbneo && previous.games[0].alternateSaveFolder == "fbneo", "Old MAME saves kept apart from FBNeo")
+check(previous.games[1].system == .arcade && previous.games[1].alternateSaveFolder == "arcade", "Old FBNeo saves kept apart from MAME")
+check(previous.games[2] == rejected && !catalogue.isListed(rejected), "Existing unsupported FBNeo entries are hidden without deleting their records")
+check(previous.games[3] == manual && manual.alternateSaveFolder == nil, "Keep explicit MAME choices and save paths")
+check(FolderScanner.merge(autoScan.games, into: &previous.games) == 2, "Rescan reuses both rerouted entries")
+let updated = previous.games[0]
+check(updated.id == oldMame.id && updated.artwork == oldMame.artwork && updated.customTitle == oldMame.customTitle && updated.alternateSaveFolder == "fbneo", "Rescan preserves IDs, customisations and per-core saves")
+check(previous.profiles[0].favourites.contains(updated.id), "Favourites survive arcade routing")
+
+for count in [0, 1, 199, 200, 201, 400, 401] {
+    let items = (0..<count).map { Game(title: "Game \($0)", system: .nes, relativePath: "\($0).nes") }
+    let pages = LibraryPage(items, index: -1).count
+    check(pages == max(1, (count + 199) / 200), "200 games per page")
+    let slices = (0..<pages).map { LibraryPage(items, index: $0) }
+    check(slices.dropLast().allSatisfy { $0.games.count == 200 }, "Full pages hold 200 games")
+    check(slices.flatMap { $0.games.map(\.id) } == items.map(\.id), "Every game appears exactly once across pages")
+    check(LibraryPage(items, index: pages).index == pages - 1, "Clamp page after filtering")
+}
+print("Android arcade routing, existing libraries and 200-game pagination passed")

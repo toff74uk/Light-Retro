@@ -2,6 +2,7 @@ Light Retro Android 2.10 catalogue and interface provenance
 
 mame-titles.json (31,122 entries) and fbneo-titles.json (8,436 entries) were copied without changes from the user's Light-Retro-2.10-Full-Source.zip, app/src/main/assets.
 collections.json reproduces the sets in MameCollections.kt and SnesCollections.kt.
+fbneo-boards.json reproduces the 1,839 preferred arcade set names and board assignments in ArcadeRouting.kt, including its tnzs rule.
 descriptions.json reproduces the short descriptions in GameDescriptions.kt.
 The iPhone landscape library, palette and settings board follow MainActivity.kt and RetroAppearance.kt from that same Android source.
 

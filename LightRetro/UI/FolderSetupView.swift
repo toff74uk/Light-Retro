@@ -19,7 +19,7 @@ struct AddGamesView: View {
                         .disabled(store.busy).accessibilityIdentifier("choose-folder")
                     Text("Includes subfolders and keeps the ROMs in their original location. Select the folder in Files, then tap Open.").font(.footnote)
                     if let system { Text(system.help).font(.footnote).foregroundStyle(.secondary) }
-                    else { Text("Name system folders MAME, FBNeo, NES, N64, SNES, Mega Drive, PC Engine or PCE CD. ZIPs without a recognised system folder are treated as MAME. For a differently named folder, select its system above.").font(.footnote).foregroundStyle(.secondary) }
+                    else { Text("Name system folders MAME, FBNeo, NES, N64, SNES, Mega Drive, PC Engine or PCE CD. Arcade archives use Android’s FBNeo list, with other sets routed to MAME. Select a system above to override automatic routing.").font(.footnote).foregroundStyle(.secondary) }
                 }
                 Section("Or add individual files") {
                     Button("Import files…", systemImage: "doc.badge.plus") { pickFiles = true }.disabled(system == nil || system == .pcecd || store.busy)
@@ -61,7 +61,7 @@ struct FolderSetupView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Label(folder.name, systemImage: "folder")
                         Text(folder.subtitle).font(.caption).foregroundStyle(.secondary)
-                        Text("\(store.data.games.filter { $0.folderID == folder.id }.count) games").font(.caption)
+                        Text("\(store.data.games.filter { $0.folderID == folder.id && GameCatalogue.shared.isListed($0) }.count) games").font(.caption)
                     }
                 }
             }

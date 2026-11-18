@@ -34,6 +34,7 @@ import UniformTypeIdentifiers
                 let decoded = try JSONDecoder().decode(LibraryData.self, from: Data(contentsOf: file))
                 guard decoded.version == 1 else { throw StoreError.message("This library needs a newer version of Light Retro.") }
                 data = decoded
+                GameCatalogue.shared.updateExistingArcadeRoutes(in: &data)
                 if data.profiles.isEmpty { data.profiles = [PlayerProfile(name: "Player 1")] }
                 for i in data.games.indices where data.games[i].catalogueTitle == nil {
                     data.games[i] = GameCatalogue.shared.identify(data.games[i])
@@ -72,11 +73,16 @@ import UniformTypeIdentifiers
     func importFiles(_ urls: [URL], system: GameSystem) {
         do {
             guard system != .pcecd else { throw StoreError.message("Use Link folder for CD games so their companion tracks stay together.") }
+            var skipped = 0
             for url in urls {
-                guard GameSystem.recognises(url.lastPathComponent, for: system) else { throw StoreError.message("\(url.lastPathComponent) is not a supported \(system.title) file. \(system.help)") }
-                let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
                 let id = UUID()
                 let relative = "\(system.rawValue)/\(id.uuidString)/\(url.lastPathComponent)"
+                let game = Game(id: id, title: "", system: system, relativePath: relative)
+                guard GameSystem.recognises(game.fileName, for: system), GameCatalogue.shared.isListed(game) else {
+                    if system == .fbneo { skipped += 1; continue }
+                    throw StoreError.message("\(game.fileName) is not a supported \(system.title) file. \(system.help)")
+                }
+                let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
                 let destination = gamesURL.appendingPathComponent(relative)
                 try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
                 var coordinationError: NSError?
@@ -86,9 +92,10 @@ import UniformTypeIdentifiers
                 }
                 if let e = coordinationError { throw e }
                 if let e = copyError { throw e }
-                data.games.append(GameCatalogue.shared.identify(Game(id: id, title: "", system: system, relativePath: relative)))
+                data.games.append(GameCatalogue.shared.identify(game))
                 persist()
             }
+            if system == .fbneo { scanStatus = "\(urls.count - skipped) imported · \(skipped) unsupported FBNeo files skipped" }
         } catch { self.error = error.localizedDescription }
     }
     func linkFolder(_ url: URL, system: GameSystem?) {
@@ -188,7 +195,8 @@ import UniformTypeIdentifiers
         return access
     }
     func saveDirectory(for game: Game) throws -> URL {
-        let path = savesURL.appendingPathComponent(profile.id.uuidString).appendingPathComponent(game.id.uuidString)
+        var path = savesURL.appendingPathComponent(profile.id.uuidString).appendingPathComponent(game.id.uuidString)
+        if let folder = game.alternateSaveFolder { path.appendPathComponent(folder) }
         try fm.createDirectory(at: path, withIntermediateDirectories: true)
         return path
     }

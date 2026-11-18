@@ -22,12 +22,11 @@ struct LibraryView: View {
     private var palette: RetroPalette { RetroPalette(profile: store.profile) }
     private var system: GameSystem? { GameSystem(rawValue: section) }
     private var compact: Bool { store.profile.compactTiles ?? true }
-    private var pageSize: Int { compact ? 72 : 36 }
     private var systems: [GameSystem] { GameSystem.playable.filter { !(store.profile.hiddenSystems ?? []).contains($0) } }
     private var sections: [(String, String)] { systems.map { ($0.rawValue, $0.title) } + [("all", "All games"), ("favourites", "Favourites"), ("recent", "Recently played"), ("profiles", "Profiles"), ("settings", "Settings")] }
     private var baseGames: [Game] {
         store.data.games.filter { game in
-            (system == nil || game.system == system) && !(store.profile.hiddenSystems ?? []).contains(game.system) &&
+            (system == nil || game.system == system) && GameCatalogue.shared.isListed(game) && !(store.profile.hiddenSystems ?? []).contains(game.system) &&
             (section != "favourites" || store.profile.favourites.contains(game.id)) &&
             (section != "recent" || store.profile.recent[game.id] != nil)
         }
@@ -35,41 +34,47 @@ struct LibraryView: View {
     private var categories: [(String, String)] {
         var result = [("all", "All ROMs")]
         if let system {
-            result += GameCatalogue.shared.collections.filter { $0.systems.contains(system) }.map { ("collection:" + $0.id, $0.title) }
+            if system == .fbneo {
+                result += GameCatalogue.fbneoBoards.map { ("board:" + $0, $0) }
+            } else {
+                result += GameCatalogue.shared.collections.filter { $0.systems.contains(system) }.map { ("collection:" + $0.id, $0.title) }
+            }
             result += Set(baseGames.map(\.collectionFolder)).sorted().map { ("folder:" + $0, $0) }
         } else {
-            result += systems.filter { s in baseGames.contains { $0.system == s } }.map { ("system:" + $0.rawValue, $0.title) }
+            let present = Set(baseGames.map(\.system))
+            result += systems.filter { present.contains($0) }.map { ("system:" + $0.rawValue, $0.title) }
         }
         return result
     }
     private var games: [Game] {
         let collection = GameCatalogue.shared.collections.first { "collection:" + $0.id == category }
+        let board = category.hasPrefix("board:") ? String(category.dropFirst(6)) : nil
         return baseGames.filter { game in
             (search.isEmpty || game.displayTitle.localizedCaseInsensitiveContains(search) || game.fileName.localizedCaseInsensitiveContains(search)) &&
-            (category == "all" || category == "folder:" + game.collectionFolder || category == "system:" + game.system.rawValue || collection?.contains(game) == true)
+            (category == "all" || category == "folder:" + game.collectionFolder || category == "system:" + game.system.rawValue || collection?.contains(game) == true ||
+             (board != nil && GameCatalogue.shared.fbneoBoard(for: game) == board))
         }.sorted {
             if section == "recent" { return (store.profile.recent[$0.id] ?? .distantPast) > (store.profile.recent[$1.id] ?? .distantPast) }
             return $0.displayTitle.localizedStandardCompare($1.displayTitle) == .orderedAscending
         }
     }
-    private var current: Game? { games.first { $0.id == selected } ?? games.first }
-    private var pageCount: Int { max(1, (games.count + pageSize - 1) / pageSize) }
-    private var pageGames: [Game] { Array(games.dropFirst(page * pageSize).prefix(pageSize)) }
     var body: some View {
         GeometryReader { geometry in
             let wide = geometry.size.width > geometry.size.height
             let count = wide ? (expanded ? 9 : (compact ? 6 : 4)) : (compact ? 3 : 2)
+            let results = games
+            let visible = LibraryPage(results, index: page)
             VStack(spacing: 7) {
-                if !expanded { header(wide: wide, width: geometry.size.width) }
+                if !expanded { header(wide: wide, width: geometry.size.width, game: visible.games.first { $0.id == selected } ?? visible.games.first) }
                 if wide {
                     HStack(alignment: .top, spacing: 8) {
                         if !expanded && !store.profile.leftHanded { rails(width: geometry.size.width) }
-                        collection(columns: count)
+                        collection(columns: count, results: results, visible: visible)
                         if !expanded && store.profile.leftHanded { rails(width: geometry.size.width) }
                     }
                 } else {
                     if !expanded { portraitRails }
-                    collection(columns: count)
+                    collection(columns: count, results: results, visible: visible)
                 }
                 footer
             }.padding(.horizontal, 10).padding(.top, 5).padding(.bottom, 3)
@@ -100,13 +105,13 @@ struct LibraryView: View {
         }
         .overlay { if asleep { screensaver } }
     }
-    private func header(wide: Bool, width: CGFloat) -> some View {
+    private func header(wide: Bool, width: CGFloat, game: Game?) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(spacing: 5) {
                 Image("Brand").resizable().scaledToFit().frame(maxHeight: 57).accessibilityLabel("Light Retro")
                 Button { showPlayers = true } label: { Label(store.profile.name, systemImage: "person.crop.circle").lineLimit(1) }.font(.system(size: 11))
             }.frame(width: wide ? width * 0.155 : 82)
-            if let game = current {
+            if let game {
                 GameArtwork(game: game).frame(width: wide ? width * 0.15 : 64, height: wide ? 90 : 76)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(game.displayTitle).font(.system(size: wide ? 21 : 17, weight: .bold)).lineLimit(2).accessibilityIdentifier("selected-title")
@@ -168,16 +173,16 @@ struct LibraryView: View {
             if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill") } }
         }.font(.system(size: 12)).padding(.horizontal, 8).frame(height: 44).background(palette.tile)
     }
-    private func collection(columns: Int) -> some View {
+    private func collection(columns: Int, results: [Game], visible: LibraryPage) -> some View {
         VStack(spacing: 6) {
             HStack {
-                Text("\(games.count) games").font(.system(size: 11))
+                Text("\(results.count) games").font(.system(size: 11))
                 Spacer(minLength: 3)
                 Button { showAdd = true } label: { Label("Add folder", systemImage: "folder.badge.plus") }.accessibilityIdentifier("add-folder")
                 Button { showSettings = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Settings").accessibilityIdentifier("open-settings")
                 Button { expanded.toggle() } label: { Image(systemName: expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") }.accessibilityLabel(expanded ? "Show menus" : "Full screen library")
             }.font(.system(size: 12, weight: .semibold)).frame(minHeight: 30)
-            if games.isEmpty {
+            if results.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "folder.badge.plus").font(.largeTitle)
                     Text(search.isEmpty ? "No games in this collection" : "No matching ROMs").font(.headline)
@@ -188,17 +193,17 @@ struct LibraryView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: columns), spacing: 6) {
-                            ForEach(pageGames) { game in gameCard(game).id(game.id) }
+                            ForEach(visible.games) { game in gameCard(game).id(game.id) }
                         }.padding(2)
                     }.onChange(of: selected) { value in if let value { proxy.scrollTo(value, anchor: .center) } }
                 }
             }
             HStack {
-                Button { changePage(-1) } label: { Label("Previous", systemImage: "chevron.left") }.disabled(page == 0)
+                Button { changePage(-1, in: results) } label: { Label("Previous", systemImage: "chevron.left") }.disabled(visible.index == 0)
                 Spacer()
-                Text("\(min(page + 1, pageCount)) / \(pageCount)").monospacedDigit()
+                Text("\(visible.index + 1) / \(visible.count)").monospacedDigit()
                 Spacer()
-                Button { changePage(1) } label: { Label("Next", systemImage: "chevron.right") }.disabled(page >= pageCount - 1)
+                Button { changePage(1, in: results) } label: { Label("Next", systemImage: "chevron.right") }.disabled(visible.index == visible.count - 1)
             }.font(.system(size: 11, weight: .semibold)).frame(height: 30)
         }.frame(maxWidth: .infinity)
     }
@@ -247,8 +252,18 @@ struct LibraryView: View {
         section = value; category = "all"; focus = 0
     }
     private func resetSelection() { page = 0; selected = games.first?.id; lastInteraction = Date() }
-    private func reconcileSelection() { if !games.contains(where: { $0.id == selected }) { resetSelection() }; page = min(page, pageCount - 1) }
-    private func changePage(_ delta: Int) { page = min(max(0, page + delta), pageCount - 1); selected = pageGames.first?.id; focus = 2 }
+    private func reconcileSelection() {
+        let results = games
+        let index = results.firstIndex { $0.id == selected } ?? 0
+        page = index / LibraryPage.size
+        selected = results.isEmpty ? nil : results[index].id
+    }
+    private func changePage(_ delta: Int, in results: [Game]) {
+        let next = LibraryPage(results, index: page + delta)
+        page = next.index
+        selected = next.games.first?.id
+        focus = 2
+    }
     private func launch(_ game: Game) { guard game.system.core != nil else { store.error = game.system.help; return }; controllers.onMenuInput = nil; playing = game }
     private func installMenuControls() {
         lastInteraction = Date(); reconcileSelection()
@@ -260,8 +275,12 @@ struct LibraryView: View {
             if button == 3 { showSettings = true; return }
             if button == 9 { expanded.toggle(); focus = 2; return }
             if button == 8 { focus = max(0, focus - 1); expanded = false; return }
-            if button == 10 || button == 11 { changePage(button == 10 ? -1 : 1); return }
-            if button == 1, let game = current { store.toggleFavourite(game); reconcileSelection(); return }
+            if button == 10 || button == 11 { changePage(button == 10 ? -1 : 1, in: games); return }
+            if button == 1 {
+                let results = games
+                if let game = results.first(where: { $0.id == selected }) ?? results.first { store.toggleFavourite(game); reconcileSelection() }
+                return
+            }
             if focus == 0 {
                 let items = sections.filter { $0.0 != "settings" && $0.0 != "profiles" }
                 let i = items.firstIndex { $0.0 == section } ?? 0
@@ -273,12 +292,15 @@ struct LibraryView: View {
                 if button == 6 { focus = 0 }
                 if button == 0 || button == 7 { focus = 2 }
             } else {
-                let list = games, i = games.firstIndex { $0.id == selected } ?? 0
-                if button == 0, let game = current { launch(game); return }
-                if button == 2, let game = current { details = game; return }
-                if button == 6 && i % columns == 0 && !expanded { focus = 1; return }
+                let list = games
+                guard !list.isEmpty else { if button == 6 { focus = 1 }; return }
+                let i = list.firstIndex { $0.id == selected } ?? 0
+                if button == 0 { launch(list[i]); return }
+                if button == 2 { details = list[i]; return }
+                if button == 6 && (i % LibraryPage.size) % columns == 0 && !expanded { focus = 1; return }
                 let delta = [4: -columns, 5: columns, 6: -1, 7: 1][button] ?? 0
-                if !list.isEmpty { let next = min(list.count - 1, max(0, i + delta)); selected = list[next].id; page = next / pageSize }
+                let next = min(list.count - 1, max(0, i + delta))
+                selected = list[next].id; page = next / LibraryPage.size
             }
         }
     }

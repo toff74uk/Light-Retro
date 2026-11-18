@@ -31,7 +31,10 @@ enum FolderScanner {
             guard LibraryRules.safeRelativePath(relative) else { continue }
             let system = folder.detectSystems == true ? GameSystem.detect(rootName: root.lastPathComponent, relativePath: relative) : folder.system
             guard let system, GameSystem.recognises(relative, for: system) else { ignored += 1; continue }
-            games.append(catalogue.identify(Game(title: "", system: system, relativePath: relative, folderID: folder.id)))
+            var game = Game(title: "", system: system, relativePath: relative, folderID: folder.id)
+            if folder.detectSystems == true { catalogue.routeAutomaticArcade(&game) }
+            guard catalogue.isListed(game) else { ignored += 1; continue }
+            games.append(catalogue.identify(game))
         }
         if let failure { throw failure }
         var metadata: [String: GamelistEntry] = [:]
@@ -57,6 +60,7 @@ enum FolderScanner {
             if let i = index[key(game)] {
                 let old = existing[i]
                 game.id = old.id; game.customTitle = old.customTitle; game.artwork = old.artwork
+                game.originalSaveSystem = old.originalSaveSystem
                 existing[i] = game
             } else { index[key(game)] = existing.count; existing.append(game); added += 1 }
         }
