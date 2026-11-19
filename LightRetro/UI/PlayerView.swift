@@ -199,7 +199,7 @@ struct PlayerView: View {
             .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidDisconnect)) { _ in input.clear(); session.pause(); showControls = true }
             .alert("Light Retro", isPresented: Binding(get: { session.message != nil }, set: { if !$0 { session.message = nil } })) { Button("OK") { session.message = nil } } message: { Text(session.message ?? "") }
             .confirmationDialog("Restart this game? Unsaved progress will be lost.", isPresented: $confirmReset, titleVisibility: .visible) { Button("Restart", role: .destructive) { session.engine.resetGame(); session.hasResume = false; session.resume() } }
-            .confirmationDialog("Exit without saving a new state?", isPresented: $confirmDiscard, titleVisibility: .visible) {
+            .alert("Exit without saving a new state?", isPresented: $confirmDiscard) {
                 Button("Exit", role: .destructive) { session.stop(input: input); dismiss() }
                 Button("Cancel", role: .cancel) {}
             } message: { Text("Your previous automatic state and in-game battery saves are kept.") }

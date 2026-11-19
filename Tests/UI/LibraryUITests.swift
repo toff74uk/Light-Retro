@@ -36,7 +36,12 @@ final class LibraryUITests: XCTestCase {
         verifyToolbar(in: app)
         attach("Arcade-six-buttons-portrait")
         XCUIDevice.shared.orientation = .landscapeLeft
-        XCTAssertTrue(sixth.isHittable)
+        // The new landscape controls are laid out after the orientation setter returns.
+        let landscapeControls = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.frame.width > app.frame.height && sixth.isHittable
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [landscapeControls], timeout: 5), .completed)
+        verifyToolbar(in: app)
         attach("Arcade-six-buttons-landscape")
     }
 
@@ -83,11 +88,17 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(discard.isHittable)
         XCTAssertTrue(app.buttons["pause-save-exit"].isHittable)
         discard.tap()
-        app.buttons["Cancel"].tap()
+        let confirmation = app.alerts["Exit without saving a new state?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.buttons["Exit"].isHittable)
+        confirmation.buttons["Cancel"].tap()
         XCTAssertTrue(discard.isHittable)
         XCUIDevice.shared.orientation = .portrait
         discard.tap()
-        app.buttons["Exit"].tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.buttons["Cancel"].isHittable)
+        attach("Exit-confirmation-portrait")
+        confirmation.buttons["Exit"].tap()
         XCTAssertTrue(play.waitForExistence(timeout: 5))
     }
 
