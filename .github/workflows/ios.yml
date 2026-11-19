@@ -21,13 +21,14 @@ concurrency:
 jobs:
   compile:
     name: Native app compile and regression tests
-    runs-on: macos-15-intel
+    runs-on: xcode-27
     timeout-minutes: 35
     env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
       BUILD_NUMBER: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
-      - run: bash ci/select_xcode.sh
+      - run: xcodebuild -version
       - name: Regression tests
         run: |
           swiftc LightRetro/Core/Models.swift LightRetro/Core/GameCatalogue.swift LightRetro/Core/FolderScanner.swift Tests/main.swift -o "$RUNNER_TEMP/library-tests"
@@ -47,7 +48,7 @@ jobs:
           echo 'Native app compiled successfully.'
       - name: Native simulator tests and screenshots
         run: |
-          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,items in d["devices"].items() if "iOS" in runtime for x in items if "iPhone" in x["name"]))')
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,items in d["devices"].items() if runtime.endswith("iOS-27-2") for x in items if "iPhone" in x["name"]))')
           xcodebuild test -project LightRetro.xcodeproj -scheme LightRetro -configuration Debug \
             -destination "platform=iOS Simulator,id=$DEVICE" -resultBundlePath build/UITests.xcresult \
             -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
@@ -114,14 +115,15 @@ jobs:
   package:
     name: Verify complete iPhone app
     needs: [compile, cores]
-    runs-on: macos-15-intel
+    runs-on: xcode-27
     timeout-minutes: 25
     env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
       INCLUDE_CORES: '1'
       BUILD_NUMBER: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
-      - run: bash ci/select_xcode.sh
+      - run: xcodebuild -version
       - uses: actions/download-artifact@v4
         with:
           pattern: core-*
@@ -145,9 +147,10 @@ jobs:
     name: Sign and upload to TestFlight
     needs: package
     if: github.event_name == 'workflow_dispatch' && inputs.testflight
-    runs-on: macos-15-intel
+    runs-on: xcode-27
     timeout-minutes: 40
     env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
       INCLUDE_CORES: '1'
       BUILD_NUMBER: ${{ github.run_number }}
       BUNDLE_ID: ${{ secrets.BUNDLE_ID }}
@@ -161,7 +164,7 @@ jobs:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
         run: |
           python3 ci/prepare_signing.py
-      - run: bash ci/select_xcode.sh
+      - run: xcodebuild -version
       - uses: actions/download-artifact@v4
         with:
           pattern: core-*
