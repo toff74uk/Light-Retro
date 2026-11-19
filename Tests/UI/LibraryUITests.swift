@@ -126,6 +126,64 @@ final class LibraryUITests: XCTestCase {
         app.buttons["add-folder"].tap()
         XCTAssertTrue(app.buttons["choose-folder"].waitForExistence(timeout: 5))
     }
+    func testOpenProfilesFromLibraryAndSettings() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-preview"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        let player = app.buttons["Player 1"]
+        XCTAssertTrue(player.waitForExistence(timeout: 20))
+        player.tap()
+        XCTAssertTrue(app.navigationBars["Profiles"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Add player"].exists)
+        app.buttons["Done"].tap()
+
+        app.buttons["open-settings"].tap()
+        app.buttons["settings-Profiles"].tap()
+        XCTAssertTrue(app.navigationBars["Profiles"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Player 1"].exists)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.buttons["save-exit"].waitForExistence(timeout: 5))
+    }
+
+    func testAppearanceAndScreensaverPreviews() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-preview"]
+        XCUIDevice.shared.orientation = .landscapeLeft
+        app.launch()
+        let settings = app.buttons["open-settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 20))
+        settings.tap()
+        app.buttons["settings-Appearance"].tap()
+        let swatch = app.buttons["Light blue"]
+        let preview = app.descendants(matching: .any).matching(identifier: "appearance-preview").firstMatch
+        XCTAssertTrue(preview.waitForExistence(timeout: 5))
+        XCTAssertLessThan(swatch.frame.maxX, preview.frame.minX)
+        swatch.tap()
+        XCTAssertTrue((preview.value as? String)?.contains("Light blue") == true)
+        attach("Appearance-landscape")
+        XCUIDevice.shared.orientation = .portrait
+        let portrait = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.frame.height > app.frame.width && swatch.isHittable && swatch.frame.maxX < preview.frame.minX
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [portrait], timeout: 5), .completed)
+        attach("Appearance-portrait")
+        app.buttons["Preview screensaver"].tap()
+        let wake = app.buttons["dismiss-screensaver"]
+        XCTAssertTrue(wake.waitForExistence(timeout: 5))
+        wake.tap()
+        XCTAssertTrue(swatch.waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["settings-Screensaver"].tap()
+        let show = app.buttons["Preview screensaver"]
+        XCTAssertTrue(show.waitForExistence(timeout: 5))
+        show.tap()
+        XCTAssertTrue(wake.waitForExistence(timeout: 5))
+        attach("Screensaver-preview")
+        wake.tap()
+        XCTAssertTrue(show.waitForExistence(timeout: 5))
+    }
+
     private func attach(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)

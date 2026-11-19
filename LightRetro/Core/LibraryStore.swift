@@ -33,9 +33,13 @@ import UniformTypeIdentifiers
             if fm.fileExists(atPath: file.path) {
                 let decoded = try JSONDecoder().decode(LibraryData.self, from: Data(contentsOf: file))
                 guard decoded.version == 1 else { throw StoreError.message("This library needs a newer version of Light Retro.") }
-                data = decoded
+                var restored = decoded
+                if restored.profiles.isEmpty { restored.profiles = [PlayerProfile(name: "Player 1")] }
+                if !restored.profiles.contains(where: { $0.id == restored.currentProfile }) {
+                    restored.currentProfile = restored.profiles[0].id
+                }
+                data = restored
                 GameCatalogue.shared.updateExistingArcadeRoutes(in: &data)
-                if data.profiles.isEmpty { data.profiles = [PlayerProfile(name: "Player 1")] }
                 for i in data.games.indices where data.games[i].catalogueTitle == nil {
                     data.games[i] = GameCatalogue.shared.identify(data.games[i])
                 }
@@ -59,7 +63,11 @@ import UniformTypeIdentifiers
         do { try JSONEncoder().encode(data).write(to: root.appendingPathComponent("library.json"), options: .atomic) }
         catch { self.error = "Could not save the library: \(error.localizedDescription)" }
     }
-    func updateProfile(_ change: (inout PlayerProfile) -> Void) { change(&data.profiles[profileIndex]); persist() }
+    func updateProfile(_ change: (inout PlayerProfile) -> Void) {
+        let index = profileIndex
+        change(&data.profiles[index])
+        persist()
+    }
     func addProfile(_ name: String) {
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }

@@ -86,7 +86,14 @@ struct LibraryView: View {
         .sheet(isPresented: $showAdd, onDismiss: installMenuControls) { AddGamesView(initialSystem: system) }
         .sheet(item: $details, onDismiss: installMenuControls) { GameDetailsView(game: $0) }
         .fullScreenCover(isPresented: $showSettings, onDismiss: installMenuControls) { SettingsView() }
-        .fullScreenCover(isPresented: $showPlayers, onDismiss: installMenuControls) { ProfilesView() }
+        .fullScreenCover(isPresented: $showPlayers, onDismiss: installMenuControls) {
+            NavigationStack {
+                ProfilesView()
+                    .navigationTitle("Profiles")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showPlayers = false } } }
+            }
+        }
         .fullScreenCover(item: $playing, onDismiss: installMenuControls) { PlayerView(game: $0) }
         .alert("Light Retro", isPresented: Binding(get: { store.error != nil && !showAdd && !showSettings && details == nil }, set: { if !$0 { store.error = nil } })) {
             Button("OK") { store.error = nil }
@@ -103,7 +110,9 @@ struct LibraryView: View {
             if minutes > 0, !store.busy, playing == nil, details == nil, !showAdd, !showSettings, !showPlayers,
                Date().timeIntervalSince(lastInteraction) > Double(minutes * 60) { asleep = true }
         }
-        .overlay { if asleep { screensaver } }
+        .overlay {
+            if asleep { ScreensaverView { asleep = false; lastInteraction = Date() } }
+        }
     }
     private func header(wide: Bool, width: CGFloat, game: Game?) -> some View {
         HStack(alignment: .center, spacing: 12) {
@@ -235,15 +244,6 @@ struct LibraryView: View {
             Spacer(minLength: 2)
             Text("Light Retro 0.3").lineLimit(1)
         }.font(.system(size: 9)).opacity(0.85).frame(height: 18)
-    }
-    private var screensaver: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            VStack(spacing: 30) {
-                Image("Brand").resizable().scaledToFit().frame(width: 240, height: 100)
-                Text(context.date, style: .time).font(.system(size: 48, weight: .light, design: .rounded))
-                Text("Tap or press a button to return").font(.caption)
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).foregroundStyle(.white).background(.black).ignoresSafeArea()
-        }.onTapGesture { asleep = false; lastInteraction = Date() }
     }
     private func chooseSection(_ value: String) {
         lastInteraction = Date()

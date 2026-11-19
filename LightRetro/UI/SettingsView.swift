@@ -24,6 +24,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var path: [SettingsPage] = []
     @State private var selected = 0
+    @State private var previewingScreensaver = false
     @State private var columns = 5
     var body: some View {
         NavigationStack(path: $path) {
@@ -53,6 +54,7 @@ struct SettingsView: View {
                 }
         }.onAppear {
             controllers.onMenuInput = { button in
+                if previewingScreensaver { previewingScreensaver = false; return }
                 if !path.isEmpty { if button == 8 { path.removeLast() }; return }
                 if button == 8 || button == 3 { store.persist(); dismiss(); return }
                 if button == 0 { path.append(SettingsPage.allCases[selected]); return }
@@ -60,11 +62,14 @@ struct SettingsView: View {
                 selected = min(SettingsPage.allCases.count - 1, max(0, selected + delta))
             }
         }
+        .fullScreenCover(isPresented: $previewingScreensaver) {
+            ScreensaverView { previewingScreensaver = false }
+        }
         .alert("Light Retro", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) { Button("OK") { store.error = nil } } message: { Text(store.error ?? "") }
     }
     @ViewBuilder private func destination(_ page: SettingsPage) -> some View {
         switch page {
-        case .appearance: AppearanceView()
+        case .appearance: AppearanceView { previewingScreensaver = true }
         case .profiles: ProfilesView()
         case .folders: FolderSetupView()
         case .browsing:
@@ -116,6 +121,7 @@ struct SettingsView: View {
                 Picker("Start after", selection: profileBinding(\.screensaverMinutes, default: 0)) {
                     Text("Off").tag(0); Text("2 minutes").tag(2); Text("5 minutes").tag(5); Text("10 minutes").tag(10)
                 }
+                Button("Preview screensaver") { previewingScreensaver = true }
                 Text("Shows the Light Retro logo and clock while the library is idle. Tap or press a controller button to return. Your iPhone’s Auto-Lock setting still applies.").font(.footnote)
             }
         case .updates:
@@ -162,36 +168,6 @@ struct ControlOptions: View {
     }
 }
 
-private struct AppearanceView: View {
-    @EnvironmentObject private var store: LibraryStore
-    var body: some View {
-        Form {
-            Section("Brand colour") {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 9) {
-                    ForEach(RetroPalette.colours, id: \.1) { name, hex in
-                        Button { store.updateProfile { $0.colourHex = hex } } label: {
-                            var sample = store.profile
-                            let _ = sample.colourHex = hex
-                            Rectangle().fill(RetroPalette(profile: sample).tone()).frame(height: 34)
-                                .overlay(Rectangle().stroke(store.profile.colourHex == hex ? .white : .clear, lineWidth: 3))
-                        }.buttonStyle(.plain).accessibilityLabel(name)
-                    }
-                }
-                HStack { Text("Strength"); Slider(value: binding(\.colourStrength), in: 0...1) }
-                HStack { Text("Brightness"); Slider(value: binding(\.brightness), in: 0.3...1) }
-                Toggle("Dark text", isOn: Binding(get: { store.profile.darkText ?? false }, set: { value in store.updateProfile { $0.darkText = value } }))
-                Text("Preview").font(.headline).frame(maxWidth: .infinity, minHeight: 75).foregroundStyle(RetroPalette(profile: store.profile).text).background(RetroPalette(profile: store.profile).background)
-            }
-            Section("Layout") {
-                Toggle("Left-handed navigation", isOn: Binding(get: { store.profile.leftHanded }, set: { value in store.updateProfile { $0.leftHanded = value } }))
-                Toggle("Compact game tiles", isOn: Binding(get: { store.profile.compactTiles ?? true }, set: { value in store.updateProfile { $0.compactTiles = value } }))
-                Text("Landscape uses the Android-style system, category and game columns. Portrait keeps the same collection with scrolling menus.").font(.footnote)
-            }
-        }
-    }
-    private func binding(_ key: WritableKeyPath<PlayerProfile, Double?>) -> Binding<Double> { Binding(get: { store.profile[keyPath: key] ?? 1 }, set: { value in store.updateProfile { $0[keyPath: key] = value } }) }
-}
-
 private struct BIOSView: View {
     @EnvironmentObject private var store: LibraryStore
     @State private var picker = false
@@ -205,31 +181,27 @@ private struct BIOSView: View {
 }
 struct ProfilesView: View {
     @EnvironmentObject private var store: LibraryStore
-    @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var rename = ""
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Who's playing?") {
-                    ForEach(store.data.profiles) { p in
-                        Button { store.data.currentProfile = p.id; store.persist(); rename = p.name } label: {
-                            HStack { Label(p.name, systemImage: "person.crop.circle"); Spacer(); if p.id == store.profile.id { Image(systemName: "checkmark.circle.fill") } }
-                        }
+        Form {
+            Section("Who's playing?") {
+                ForEach(store.data.profiles) { p in
+                    Button { store.data.currentProfile = p.id; store.persist(); rename = p.name } label: {
+                        HStack { Label(p.name, systemImage: "person.crop.circle"); Spacer(); if p.id == store.profile.id { Image(systemName: "checkmark.circle.fill") } }
                     }
                 }
-                Section("New player") {
-                    TextField("Name", text: $name)
-                    Button("Add player") { store.addProfile(name); name = ""; rename = store.profile.name }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                Section("Rename current player") {
-                    TextField("Name", text: $rename)
-                    Button("Save name") { let value = rename.trimmingCharacters(in: .whitespacesAndNewlines); if !value.isEmpty { store.updateProfile { $0.name = String(value.prefix(40)) } } }
-                }
-                Section { Text("Players share the game library. Favourites, recently played games, colours, handedness and saves are separate.").font(.footnote) }
-            }.navigationTitle("Players").onAppear { rename = store.profile.name }
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-        }
+            }
+            Section("New player") {
+                TextField("Name", text: $name)
+                Button("Add player") { store.addProfile(name); name = ""; rename = store.profile.name }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            Section("Rename current player") {
+                TextField("Name", text: $rename)
+                Button("Save name") { let value = rename.trimmingCharacters(in: .whitespacesAndNewlines); if !value.isEmpty { store.updateProfile { $0.name = String(value.prefix(40)) } } }
+            }
+            Section { Text("Players share the game library. Favourites, recently played games, colours, handedness and saves are separate.").font(.footnote) }
+        }.onAppear { rename = store.profile.name }
     }
 }
 
