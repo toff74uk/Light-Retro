@@ -24,6 +24,7 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(stick.waitForExistence(timeout: 5))
         XCTAssertEqual(stick.label, "Directional joystick")
         XCTAssertFalse(sixth.exists)
+        verifyToolbar(in: app)
         XCUIDevice.shared.orientation = .portrait
         // A native tap synchronises with the rotation animation. Verify it
         // actually opens the menu and changes the visible gameplay buttons.
@@ -32,10 +33,41 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(automatic.waitForExistence(timeout: 5))
         automatic.tap()
         XCTAssertTrue(sixth.waitForExistence(timeout: 5))
+        verifyToolbar(in: app)
         attach("Arcade-six-buttons-portrait")
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(sixth.isHittable)
         attach("Arcade-six-buttons-landscape")
+    }
+
+    private func verifyToolbar(in app: XCUIApplication) {
+        let coin = app.buttons["COIN"]
+        let start = app.buttons["START"]
+        let setup = app.buttons["emulator-setup"]
+        XCTAssertTrue(coin.isHittable && start.isHittable && setup.isHittable)
+        XCTAssertLessThan(coin.frame.midX, start.frame.midX)
+        XCTAssertLessThan(start.frame.midX, app.frame.midX)
+        XCTAssertGreaterThan(setup.frame.midX, app.frame.midX)
+        XCTAssertLessThan(coin.frame.midY, app.frame.height / 3)
+        XCTAssertEqual(coin.frame.midY, setup.frame.midY, accuracy: 5)
+    }
+
+    func testConsoleSetupReturnsToTheGame() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-preview", "--paused-game"]
+        XCUIDevice.shared.orientation = .landscapeLeft
+        app.launch()
+        let game = app.buttons["game-Super Mario World (USA)"]
+        XCTAssertTrue(game.waitForExistence(timeout: 20))
+        game.tap()
+        app.buttons["play-selected"].tap()
+        app.buttons["Continue playing"].tap()
+        let setup = app.buttons["emulator-setup"]
+        XCTAssertTrue(setup.waitForExistence(timeout: 5))
+        setup.tap()
+        XCTAssertTrue(app.staticTexts["Super Nintendo setup"].waitForExistence(timeout: 5))
+        app.buttons["setup-done"].tap()
+        XCTAssertTrue(setup.waitForExistence(timeout: 5))
     }
 
     func testPauseExitStaysVisibleAndCanBeCancelled() {

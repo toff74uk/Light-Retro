@@ -4,6 +4,8 @@ import GameController
 
 @MainActor final class GameSession: ObservableObject {
     let engine = RetroEngine()
+    @Published private(set) var configuring = false
+    @Published private(set) var options: [LREmulatorOption] = []
     @Published var paused = true
     @Published var loaded = false
     @Published var message: String?
@@ -60,8 +62,24 @@ import GameController
             if !hasResume { resume() }
         } catch { message = error.localizedDescription }
     }
-    func resume() { guard loaded else { return }; hasResume = false; paused = false; engine.start(); UIApplication.shared.isIdleTimerDisabled = true }
-    func pause() { engine.pause(); paused = true; UIApplication.shared.isIdleTimerDisabled = false; if !engine.saveRAM() { message = "Could not save battery progress. Check your iPhone's free space." } }
+    func openSetup(for system: GameSystem) {
+        if system == .arcade {
+            engine.clearButtons()
+            if engine.toggleMAMEMenu() { return }
+        }
+        pause()
+        refreshOptions()
+        configuring = true
+    }
+    private func refreshOptions() {
+        options = engine.emulatorOptions().sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+    }
+    func setOption(_ key: String, value: String) {
+        if !engine.setOption(key, value: value) { message = "This setting is no longer available." }
+        refreshOptions()
+    }
+    func resume() { guard loaded else { return }; configuring = false; hasResume = false; paused = false; engine.start(); UIApplication.shared.isIdleTimerDisabled = true }
+    func pause() { configuring = false; engine.pause(); paused = true; UIApplication.shared.isIdleTimerDisabled = false; if !engine.saveRAM() { message = "Could not save battery progress. Check your iPhone's free space." } }
     func restoreAutomatic() { guard let saves else { return }; if engine.loadState(saves.appendingPathComponent("auto.state").path) { hasResume = false; resume() } else { message = "This automatic save could not be loaded. It may belong to an older engine build." } }
     func saveSlot() { guard let saves else { return }; message = engine.saveState(saves.appendingPathComponent("slot-\(slot).state").path) ? "Saved to slot \(slot)." : "The state could not be saved. Check free space; this game may not support save states." }
     func loadSlot() { guard let saves else { return }; if engine.loadState(saves.appendingPathComponent("slot-\(slot).state").path) { resume() } else { message = "Slot \(slot) is empty or incompatible with this game engine." } }
@@ -127,14 +145,34 @@ struct PlayerView: View {
             ZStack {
                 Color.black.ignoresSafeArea()
                 VStack(spacing: 0) {
-                    HStack {
-                        Button { input.clear(); session.pause() } label: { Image(systemName: "pause.circle.fill").font(.title) }.accessibilityLabel("Pause game")
+                    HStack(spacing: 2) {
+                        if showControls { systemKeys }
+                        Button { input.clear(); session.pause() } label: { Image(systemName: "pause.circle.fill").font(.title).frame(width: 44, height: 44) }.accessibilityLabel("Pause game")
                         Spacer()
-                        Text(game.displayTitle).font(.caption).lineLimit(1)
+                        ViewThatFits(in: .horizontal) {
+                            Text(game.displayTitle).font(.caption).lineLimit(1)
+                            Color.clear.frame(width: 0, height: 1)
+                        }
                         Spacer()
-                        if game.system.isArcade { layoutMenu }
-                        Button { showControls.toggle(); input.clear() } label: { Image(systemName: "gamecontroller").font(.title2) }.accessibilityLabel("Show or hide touch controls")
-                    }.foregroundStyle(.white).padding(.horizontal, 18).padding(.vertical, 6)
+                        if activeSystem.isArcade {
+                            if portrait { layoutMenu.labelStyle(.iconOnly).frame(minWidth: 44) }
+                            else { layoutMenu }
+                        }
+                        Button {
+                            showControls.toggle()
+                            input.clear()
+                            session.engine.clearButtons()
+                        } label: {
+                            Image(systemName: "gamecontroller").font(.title2).frame(width: 44, height: 44)
+                        }.accessibilityLabel("Show or hide touch controls")
+                        Button {
+                            input.clear()
+                            session.openSetup(for: activeSystem)
+                        } label: {
+                            Image(systemName: "gearshape.fill").font(.title2).frame(width: 44, height: 44)
+                        }.accessibilityLabel(activeSystem == .arcade ? "MAME setup" : "Emulator setup")
+                            .accessibilityIdentifier("emulator-setup")
+                    }.foregroundStyle(.white).padding(.horizontal, portrait ? 6 : 12)
                     ZStack {
                         GameScreen(engine: session.engine)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -142,7 +180,9 @@ struct PlayerView: View {
                     }
                     if showControls && portrait && !session.paused { touchPad.frame(height: 220).padding(.horizontal, 20) }
                 }.allowsHitTesting(!session.paused).accessibilityHidden(session.paused)
-                if session.paused {
+                if session.configuring {
+                    setupPanel
+                } else if session.paused {
                     pauseMenu.padding(12).frame(maxWidth: 450, maxHeight: 480)
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20)).padding(8)
                 }
@@ -164,6 +204,54 @@ struct PlayerView: View {
                 Button("Cancel", role: .cancel) {}
             } message: { Text("Your previous automatic state and in-game battery saves are kept.") }
     }
+    @ViewBuilder private var systemKeys: some View {
+        if activeSystem != .n64 && (activeSystem != .mega || buttons == 6) {
+            let label = activeSystem.isArcade ? "COIN" : (activeSystem == .mega ? "MODE" : "SELECT")
+            SystemKey(label: label, id: 2, width: 52)
+        }
+        SystemKey(label: activeSystem == .pce || activeSystem == .pcecd ? "RUN" : "START", id: 3, width: 52)
+    }
+
+    private var setupPanel: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("\(activeSystem.title) setup").font(.headline)
+                Spacer()
+                Button("Done") { input.clear(); session.resume() }
+                    .frame(minHeight: 44).accessibilityIdentifier("setup-done")
+            }.padding(.horizontal)
+            if session.options.isEmpty {
+                ContentUnavailableView("No emulator options", systemImage: "gearshape",
+                    description: Text("This emulator has no adjustable settings for this game."))
+            } else {
+                List {
+                    Section {
+                        ForEach(session.options, id: \.key) { option in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Picker(option.title, selection: Binding(
+                                    get: { option.value },
+                                    set: { session.setOption(option.key, value: $0) }
+                                )) {
+                                    ForEach(option.values.indices, id: \.self) { index in
+                                        Text(option.labels[index]).tag(option.values[index])
+                                    }
+                                }.pickerStyle(.menu)
+                                if !option.helpText.isEmpty {
+                                    Text(option.helpText).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("Saved for this game. Some changes take effect when you reopen it.").textCase(nil)
+                    }
+                }.listStyle(.plain)
+            }
+        }
+        .frame(maxWidth: 600, maxHeight: .infinity)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding(8)
+    }
+
     private var pauseMenu: some View {
         VStack(spacing: 8) {
             Text(game.displayTitle).font(.headline).lineLimit(1)
@@ -231,15 +319,14 @@ private struct TouchControls: View {
             let width = area.size.width
             let height = min(220, area.size.height)
             let pad = min(138, width * 0.32, height * 0.72)
-            let middle = min(62, max(44, width * 0.14))
+            let spacingBudget = min(62, max(44, width * 0.14))
             let columns = (face.map(\.column).max() ?? 0) + 1
             let rows = (face.map(\.row).max() ?? 0) + 1
             let shoulders = system == .snes || system == .n64
             let step = min(store.profile.largeTouchButtons == true ? 60 : 50,
-                           (width - pad - middle - 10) / columns,
+                           (width - pad - spacingBudget - 10) / columns,
                            (height - (shoulders ? 48 : 0)) / rows)
-            TouchLayout(system: system, count: count, face: face, step: max(1, step), padWidth: pad,
-                        middle: middle,
+            TouchLayout(system: system, face: face, step: max(1, step), padWidth: pad,
                         response: store.profile.controlResponse ?? .standard)
                 .frame(maxHeight: height).frame(maxHeight: .infinity, alignment: .bottom)
         }
@@ -248,11 +335,9 @@ private struct TouchControls: View {
 
 private struct TouchLayout: View {
     let system: GameSystem
-    let count: Int
     let face: [PadButton]
     let step: CGFloat
     let padWidth: CGFloat
-    let middle: CGFloat
     let response: ControlResponse
     private var stickMode: TouchStickMode {
         if system.isArcade { return .arcade }
@@ -265,27 +350,20 @@ private struct TouchLayout: View {
         VStack(spacing: 4) {
             if system == .snes || system == .n64 {
                 HStack {
-                    key("L", 10, width: 48)
-                    if system == .n64 { key("Z", 12, width: 48) }
+                    SystemKey(label: "L", id: 10, width: 48)
+                    if system == .n64 { SystemKey(label: "Z", id: 12, width: 48) }
                     Spacer()
                     if system == .n64 {
                         Button(dpadMode ? "D-PAD" : "STICK") { dpadMode.toggle(); input.clear() }
                             .font(.caption2.bold()).buttonStyle(.bordered).tint(.white)
                     }
-                    key("R", 11, width: 48)
+                    SystemKey(label: "R", id: 11, width: 48)
                 }
             }
             Spacer(minLength: 0)
             HStack(alignment: .center, spacing: 0) {
                 TouchStick(response: response, mode: stickMode)
                     .frame(width: padWidth, height: padWidth)
-                Spacer(minLength: 2)
-                VStack(spacing: 5) {
-                    if system != .n64 && (system != .mega || count == 6) {
-                        key(system.isArcade ? "COIN" : (system == .mega ? "MODE" : "SELECT"), 2, width: middle)
-                    }
-                    key(system == .pce || system == .pcecd ? "RUN" : "START", 3, width: middle)
-                }
                 Spacer(minLength: 2)
                 faceButtons
             }
@@ -332,7 +410,14 @@ private struct TouchLayout: View {
             .accessibilityIdentifier("pad-" + button.label)
     }
 
-    private func key(_ label: String, _ id: Int, width: CGFloat) -> some View {
+}
+
+private struct SystemKey: View {
+    let label: String
+    let id: Int
+    let width: CGFloat
+    @EnvironmentObject private var input: ControllerHub
+    var body: some View {
         PadKey(label: label, tint: .gray, down: input.pressed.contains(id),
                width: width, height: 44, fontSize: label.count > 2 ? 12 : 17) {
             input.setTouch(id, down: $0)

@@ -2,7 +2,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <QuartzCore/QuartzCore.h>
 #include <dlfcn.h>
-#include <map>
+#include "CoreOptions.hpp"
 #include <string>
 #include <memory>
 #include "libretro.h"
@@ -41,7 +41,10 @@ struct CoreContext {
     CoreAPI api{};
     bool initialized=false, loaded=false, hasRun=false;
     std::string system, save, game, corePath;
-    std::map<std::string,std::string> options;
+    CoreOptions options;
+    retro_core_options_update_display_callback_t updateDisplay = nullptr;
+    retro_keyboard_event_t keyboard = nullptr;
+    unsigned tabFrames = 0;
     std::vector<uint8_t> rom, pixels;
     unsigned pixelFormat=RETRO_PIXEL_FORMAT_0RGB1555;
     JoypadButtons buttons[4]{};
@@ -109,34 +112,49 @@ static bool environment(unsigned command, void* data) {
         case RETRO_ENVIRONMENT_SET_GEOMETRY: {
             [frontend applyGeometry:static_cast<retro_game_geometry*>(data)]; return true;
         }
-        case RETRO_ENVIRONMENT_SET_VARIABLES: {
-            for(auto* v=static_cast<retro_variable*>(data);v && v->key;v++) {
-                std::string value=v->value?v->value:""; auto pos=value.find("; ");
-                if(pos!=std::string::npos) value=value.substr(pos+2);
-                value=value.substr(0,value.find('|')); active->options[v->key]=value;
-            } return true;
-        }
+        case RETRO_ENVIRONMENT_SET_VARIABLES:
+            active->options.replace(static_cast<const retro_variable*>(data));
+            return true;
         case RETRO_ENVIRONMENT_GET_VARIABLE: {
-            auto* v=static_cast<retro_variable*>(data);
-            if(const char* forced=forcedOption(v->key)) { v->value=forced; return true; }
-            auto found=active->options.find(v->key);
-            v->value=found==active->options.end()?nullptr:found->second.c_str(); return v->value!=nullptr;
+            if (!data) return true;
+            auto* v = static_cast<retro_variable*>(data);
+            if (!v->key) return false;
+            if (const char* forced = forcedOption(v->key)) { v->value = forced; return true; }
+            auto found = active->options.definitions.find(v->key);
+            v->value = found == active->options.definitions.end() ? nullptr : found->second.value.c_str();
+            return v->value != nullptr;
         }
-        case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: *static_cast<bool*>(data)=false; return true;
+        case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
+            *static_cast<bool*>(data) = std::exchange(active->options.changed, false);
+            return true;
         case RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION: *static_cast<unsigned*>(data)=2; return true;
-        case RETRO_ENVIRONMENT_SET_CORE_OPTIONS: {
-            for(auto* d=static_cast<retro_core_option_definition*>(data);d && d->key;d++)
-                active->options[d->key]=d->default_value?d->default_value:(d->values[0].value?d->values[0].value:"");
+        case RETRO_ENVIRONMENT_SET_CORE_OPTIONS:
+            active->options.replace(static_cast<const retro_core_option_definition*>(data));
             return true;
-        }
-        case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_INTL: return environment(RETRO_ENVIRONMENT_SET_CORE_OPTIONS,static_cast<retro_core_options_intl*>(data)->us);
+        case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_INTL:
+            return environment(RETRO_ENVIRONMENT_SET_CORE_OPTIONS, data ? static_cast<retro_core_options_intl*>(data)->us : nullptr);
         case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2: {
-            auto* options=static_cast<retro_core_options_v2*>(data);
-            for(auto* d=options->definitions;d && d->key;d++)
-                active->options[d->key]=d->default_value?d->default_value:(d->values[0].value?d->values[0].value:"");
+            auto* options = static_cast<const retro_core_options_v2*>(data);
+            active->options.replace(options ? options->definitions : nullptr);
+            return false; // Registered successfully, displayed as a flat list.
+        }
+        case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2_INTL:
+            return environment(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2, data ? static_cast<retro_core_options_v2_intl*>(data)->us : nullptr);
+        case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY: {
+            auto* display = static_cast<const retro_core_option_display*>(data);
+            if (display && display->key) {
+                auto found = active->options.definitions.find(display->key);
+                if (found != active->options.definitions.end()) found->second.visible = display->visible;
+            }
             return true;
         }
-        case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2_INTL: return environment(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2,static_cast<retro_core_options_v2_intl*>(data)->us);
+        case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_UPDATE_DISPLAY_CALLBACK:
+            active->updateDisplay = data ? static_cast<const retro_core_options_update_display_callback*>(data)->callback : nullptr;
+            return true;
+        case RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK:
+            if (active->name != "mamearcade" || !data) return false;
+            active->keyboard = static_cast<const retro_keyboard_callback*>(data)->callback;
+            return true;
         case RETRO_ENVIRONMENT_GET_INPUT_BITMASKS: return true;
         case RETRO_ENVIRONMENT_GET_INPUT_DEVICE_CAPABILITIES: *static_cast<uint64_t*>(data)=(1ULL<<RETRO_DEVICE_JOYPAD)|(1ULL<<RETRO_DEVICE_ANALOG); return true;
         case RETRO_ENVIRONMENT_GET_LANGUAGE: *static_cast<unsigned*>(data)=RETRO_LANGUAGE_ENGLISH; return true;
@@ -184,6 +202,29 @@ static int16_t inputState(unsigned port,unsigned device,unsigned index,unsigned 
     return id<16 ? ((state>>id)&1) : 0;
 }
 
+static NSString* optionString(const std::string& text) {
+    return [NSString stringWithUTF8String:text.c_str()] ?: [NSString stringWithCString:text.c_str() encoding:NSISOLatin1StringEncoding];
+}
+
+@implementation LREmulatorOption
+- (instancetype)initWithKey:(const std::string&)key option:(const CoreOption&)option {
+    if ((self = [super init])) {
+        _key = optionString(key);
+        _title = optionString(option.title);
+        _helpText = optionString(option.info);
+        _value = optionString(option.value);
+        NSMutableArray *values = [NSMutableArray array], *labels = [NSMutableArray array];
+        for (const auto& choice : option.choices) {
+            [values addObject:optionString(choice.first)];
+            [labels addObject:optionString(choice.second)];
+        }
+        _values = [values copy];
+        _labels = [labels copy];
+    }
+    return self;
+}
+@end
+
 @implementation RetroEngine
 - (instancetype)init {
     if((self=[super init])) {
@@ -225,6 +266,11 @@ static int16_t inputState(unsigned port,unsigned device,unsigned index,unsigned 
     _core=std::make_unique<CoreContext>();
     _core->name=core.UTF8String;
     _core->corePath=binary.UTF8String; _core->game=game.UTF8String; _core->system=system.UTF8String; _core->save=save.UTF8String;
+    NSDictionary *savedOptions = [NSDictionary dictionaryWithContentsOfFile:[self optionsPath]];
+    for (NSString *key in savedOptions) {
+        NSString *value = savedOptions[key];
+        if ([value isKindOfClass:NSString.class]) _core->options.preferences[key.UTF8String] = value.UTF8String;
+    }
     _core->handle=dlopen(binary.fileSystemRepresentation,RTLD_NOW|RTLD_LOCAL);
     if(!_core->handle) { _core.reset(); return @"This engine could not be loaded. Install a complete signed build of Light Retro."; }
 #define LOAD(field) _core->api.field=reinterpret_cast<decltype(_core->api.field)>(dlsym(_core->handle,"retro_" #field)); if(!_core->api.field) { [self stop]; return @"The bundled game engine is incomplete."; }
@@ -295,6 +341,8 @@ static int16_t inputState(unsigned port,unsigned device,unsigned index,unsigned 
     [_videoView makeCurrent];
     while(_accumulator>=step && frames<4) {
         _core->api.run();
+        if (_core->tabFrames && --_core->tabFrames == 0 && _core->keyboard)
+            _core->keyboard(false, RETROK_TAB, 0, 0);
         for (auto& port : _core->buttons) port.finishFrame();
         _core->hasRun=true; _accumulator-=step; frames++; step=1.0/_core->fps;
     }
@@ -348,6 +396,33 @@ static int16_t inputState(unsigned port,unsigned device,unsigned index,unsigned 
     NSData* data=[NSData dataWithContentsOfFile:path]; if(!data || data.length!=_core->api.serialize_size()) return NO;
     return _core->api.unserialize(data.bytes,data.length);
 }
+- (NSString*)optionsPath {
+    return [@(_core->save.c_str()) stringByAppendingPathComponent:[@(_core->name.c_str()) stringByAppendingString:@"-options.plist"]];
+}
+- (NSArray<LREmulatorOption *> *)emulatorOptions {
+    NSMutableArray *result = [NSMutableArray array];
+    if (!_core) return result;
+    if (_core->updateDisplay) _core->updateDisplay();
+    for (const auto& [key, option] : _core->options.definitions) {
+        if (option.visible && !forcedOption(key.c_str()) && option.choices.size() > 1)
+            [result addObject:[[LREmulatorOption alloc] initWithKey:key option:option]];
+    }
+    return result;
+}
+- (BOOL)setOption:(NSString*)key value:(NSString*)value {
+    if (!_core || forcedOption(key.UTF8String) || !_core->options.set(key.UTF8String, value.UTF8String)) return NO;
+    NSMutableDictionary *saved = [NSMutableDictionary dictionary];
+    for (const auto& [name, selection] : _core->options.preferences) saved[optionString(name)] = optionString(selection);
+    if (![saved writeToFile:[self optionsPath] atomically:YES] && self.messageHandler)
+        self.messageHandler(@"The setting was applied, but could not be saved for next time.");
+    return YES;
+}
+- (BOOL)toggleMAMEMenu {
+    if (!_running || !_core || !_core->keyboard || _core->name != "mamearcade") return NO;
+    if (!_core->tabFrames) _core->keyboard(true, RETROK_TAB, 0, 0);
+    _core->tabFrames = 2;
+    return YES;
+}
 - (void)resetGame { if(_core && _core->loaded) { [_videoView makeCurrent]; _core->api.reset(); } }
 - (void)setButton:(NSInteger)button pressed:(BOOL)pressed port:(NSInteger)port {
     if(!_core || port<0 || port>=4 || button<0 || button>=16) return;
@@ -356,7 +431,13 @@ static int16_t inputState(unsigned port,unsigned device,unsigned index,unsigned 
 - (void)setAxis:(NSInteger)axis value:(float)value stick:(NSInteger)stick port:(NSInteger)port {
     if(_core) _core->analog.set((int)port,(int)stick,(int)axis,value);
 }
-- (void)clearButtons { if(_core) { for (auto& port : _core->buttons) port = {}; _core->analog.clear(); } }
+- (void)clearButtons {
+    if (!_core) return;
+    if (_core->tabFrames && _core->keyboard) _core->keyboard(false, RETROK_TAB, 0, 0);
+    _core->tabFrames = 0;
+    for (auto& port : _core->buttons) port = {};
+    _core->analog.clear();
+}
 - (void)finishGraphics { [_videoView finish]; }
 - (void)stop {
     [self pause]; [self saveRAM];
