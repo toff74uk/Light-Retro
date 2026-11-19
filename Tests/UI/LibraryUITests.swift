@@ -203,10 +203,16 @@ final class LibraryUITests: XCTestCase {
         let fbneo = app.cells.containing(.switch, identifier: "FinalBurn Neo").firstMatch
         XCTAssertTrue(mame.waitForExistence(timeout: 5))
         XCTAssertTrue(fbneo.exists)
-        let handle = fbneo.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
-        let target = mame.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.18))
-        handle.press(forDuration: 0.6, thenDragTo: target)
+        // Some simulator versions expose the reorder control as its own button.
+        // Otherwise its centre is 32 points inside the trailing edge of the inset cell.
+        let reorder = fbneo.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] 'Reorder'")).firstMatch
+        let centre = CGVector(dx: 0.5, dy: 0.5)
+        let handle = reorder.exists ? reorder.coordinate(withNormalizedOffset: centre) :
+            fbneo.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5)).withOffset(CGVector(dx: -32, dy: 0))
+        let target = mame.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.15)).withOffset(CGVector(dx: -32, dy: 0))
+        handle.press(forDuration: 0.8, thenDragTo: target, withVelocity: .slow, thenHoldForDuration: 0.5)
         XCTAssertLessThan(fbneo.frame.midY, mame.frame.midY)
+        attach("System-order")
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["save-exit"].tap()
         let first = app.buttons["nav-FinalBurn Neo"]
