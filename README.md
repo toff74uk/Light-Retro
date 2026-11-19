@@ -29,9 +29,12 @@ No commercial ROMs, BIOS images or personal credentials are included. The applic
 
 Every push runs library/scanner/metadata/migration, archive safety and audio/video regression tests, compiles the iPhone application, runs native simulator UI checks in portrait and landscape, builds the seven emulator cores from pinned source, then verifies a complete unsigned bundle. Nothing is uploaded to Apple automatically.
 
-For a local Mac build with Xcode 26 and XcodeGen:
+The application, bundle verification and TestFlight archive use Xcode 27.2 and the iOS 27.2 SDK on an Apple Silicon runner. UI tests run on the iOS 27.2 simulator. The minimum supported iOS version remains 17.0. Emulator frameworks retain their tested Xcode 26 toolchain and cache; the final app bundle must report an iOS 27 or newer SDK before upload.
+
+For a local Apple Silicon Mac build, install Xcode 26, Xcode 27.2 and XcodeGen. Build the engines with Xcode 26, then select Xcode 27.2 for the application:
 
 ```sh
+bash ci/select_xcode.sh
 python3 ci/build_core.py fceumm
 python3 ci/build_core.py snes9x
 python3 ci/build_core.py genesis_plus_gx
@@ -39,8 +42,9 @@ python3 ci/build_core.py mednafen_pce_fast
 python3 ci/build_core.py fbneo
 python3 ci/build_core.py mamearcade
 python3 ci/build_core.py mupen64plus_next
+export DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer
 INCLUDE_CORES=1 BUNDLE_ID=com.lightretro.app BUILD_NUMBER=1 python3 ci/generate_project.py
-open LightRetro.xcodeproj
+open -a /Applications/Xcode_27.2.app LightRetro.xcodeproj
 ```
 
 Select your Apple team in Xcode before installing on a device. `INCLUDE_CORES=1` is mandatory for a playable build. Omitting it is only for compiling frontend changes; it does not produce a playable app. Core frameworks are device-only arm64, not simulator binaries.
