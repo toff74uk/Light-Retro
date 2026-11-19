@@ -69,21 +69,32 @@ struct SettingsView: View {
     }
     @ViewBuilder private func destination(_ page: SettingsPage) -> some View {
         switch page {
-        case .appearance: AppearanceView { previewingScreensaver = true }
+        case .appearance: AppearanceView()
         case .profiles: ProfilesView()
         case .folders: FolderSetupView()
         case .browsing:
             Form {
                 Section("Game tiles") { Toggle("Compact tiles", isOn: profileBinding(\.compactTiles, default: true)) }
-                Section("Visible systems") {
-                    ForEach(GameSystem.playable) { system in
+                Section {
+                    ForEach(store.profile.orderedSystems) { system in
                         Toggle(system.title, isOn: Binding(get: { !(store.profile.hiddenSystems ?? []).contains(system) }, set: { visible in
                             store.updateProfile { profile in var hidden = profile.hiddenSystems ?? []; if visible { hidden.remove(system) } else { hidden.insert(system) }; profile.hiddenSystems = hidden }
                         }))
                     }
+                    .onMove { offsets, destination in
+                        store.updateProfile { profile in
+                            var systems = profile.orderedSystems
+                            systems.move(fromOffsets: offsets, toOffset: destination)
+                            profile.systemOrder = systems.map(\.rawValue)
+                        }
+                    }
+                } header: {
+                    Text("System order & visibility")
+                } footer: {
+                    Text("Drag the handles to reorder systems for this player. Switch a system off to hide it. Its games and saves are kept.")
                 }
-                Section { Text("Hiding a system keeps its games and saves. SCUMM will be added later.").font(.footnote) }
             }
+            .environment(\.editMode, .constant(.active))
         case .artwork:
             Form {
                 Section {

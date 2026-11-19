@@ -18,11 +18,14 @@ LibraryRules.upsert(Game(title:"Game",system:.nes,relativePath:"game.nes",folder
 check(games.count==2,"Different roots must not collide")
 var data=LibraryData();data.games=games;data.profiles[0].favourites.insert(game.id)
 data.profiles.append(PlayerProfile(name:"Player 2"))
+data.profiles[0].systemOrder = ["n64", "removed", "n64", "arcade", "scumm"]
 let bytes=try JSONEncoder().encode(data)
 let restored=try JSONDecoder().decode(LibraryData.self,from:bytes)
 check(restored.profiles[0].favourites.contains(game.id),"Favourites persist")
 check(restored.profiles[1].favourites.isEmpty,"Profiles stay isolated")
 check(restored.games[0].id==game.id,"Stable game identity")
+check(restored.profiles[0].orderedSystems == [.n64, .arcade] + GameSystem.playable.filter { $0 != .n64 && $0 != .arcade }, "Restore custom order, skip unavailable and duplicate systems, and append new ones")
+check(restored.profiles[1].orderedSystems == GameSystem.playable, "System order is per player")
 check(GameSystem.arcade.core == "mamearcade", "MAME must use its own engine")
 check(GameSystem.n64.core == "mupen64plus_next", "N64 engine selected")
 check(GameSystem.scumm.core == nil, "SCUMM remains deferred")
@@ -90,7 +93,7 @@ check(withSymlink.games.count == 3, "Do not follow symlink directories")
 // Omitted optional fields are how 0.2 libraries actually look on disk.
 var legacy = try JSONSerialization.jsonObject(with: bytes) as! [String: Any]
 legacy.removeValue(forKey: "downloadArtwork")
-legacy["profiles"] = (legacy["profiles"] as! [[String: Any]]).map { record in record.filter { !["compactTiles", "colourHex", "colourStrength", "brightness", "darkText", "hiddenSystems", "screensaverMinutes"].contains($0.key) } }
+legacy["profiles"] = (legacy["profiles"] as! [[String: Any]]).map { record in record.filter { !["compactTiles", "colourHex", "colourStrength", "brightness", "darkText", "hiddenSystems", "systemOrder", "screensaverMinutes"].contains($0.key) } }
 let migrated = try JSONDecoder().decode(LibraryData.self, from: JSONSerialization.data(withJSONObject: legacy))
 check(migrated.profiles[0].favourites.contains(game.id) && migrated.games[0].id == game.id, "Old library compatibility preserves favourites and saves")
 print("Folder, title, artwork matching and migration tests passed")

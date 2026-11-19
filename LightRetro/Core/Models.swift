@@ -180,10 +180,19 @@ struct PlayerProfile: Identifiable, Codable {
     var brightness: Double?
     var darkText: Bool?
     var hiddenSystems: Set<GameSystem>?
+    var systemOrder: [String]?
     var screensaverMinutes: Int?
     var controlResponse: ControlResponse?
     var largeTouchButtons: Bool?
     var arcadeTouchButtons: [String: Int]?
+
+    var orderedSystems: [GameSystem] {
+        let playable = GameSystem.playable
+        guard let systemOrder else { return playable }
+        var remaining = Set(playable)
+        let saved = systemOrder.compactMap(GameSystem.init(rawValue:)).filter { remaining.remove($0) != nil }
+        return saved + playable.filter { remaining.contains($0) }
+    }
 
     func touchButtonOverride(for game: Game) -> Int? {
         guard game.system.isArcade, let count = arcadeTouchButtons?[game.romStem.lowercased()],

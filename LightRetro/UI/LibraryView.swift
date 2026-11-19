@@ -22,7 +22,7 @@ struct LibraryView: View {
     private var palette: RetroPalette { RetroPalette(profile: store.profile) }
     private var system: GameSystem? { GameSystem(rawValue: section) }
     private var compact: Bool { store.profile.compactTiles ?? true }
-    private var systems: [GameSystem] { GameSystem.playable.filter { !(store.profile.hiddenSystems ?? []).contains($0) } }
+    private var systems: [GameSystem] { store.profile.orderedSystems.filter { !(store.profile.hiddenSystems ?? []).contains($0) } }
     private var sections: [(String, String)] { systems.map { ($0.rawValue, $0.title) } + [("all", "All games"), ("favourites", "Favourites"), ("recent", "Recently played"), ("profiles", "Profiles"), ("settings", "Settings")] }
     private var baseGames: [Game] {
         store.data.games.filter { game in

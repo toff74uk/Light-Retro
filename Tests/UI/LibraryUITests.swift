@@ -168,20 +168,50 @@ final class LibraryUITests: XCTestCase {
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [portrait], timeout: 5), .completed)
         attach("Appearance-portrait")
-        app.buttons["Preview screensaver"].tap()
-        let wake = app.buttons["dismiss-screensaver"]
-        XCTAssertTrue(wake.waitForExistence(timeout: 5))
-        wake.tap()
-        XCTAssertTrue(swatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Preview screensaver"].exists)
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["settings-Screensaver"].tap()
         let show = app.buttons["Preview screensaver"]
         XCTAssertTrue(show.waitForExistence(timeout: 5))
         show.tap()
+        let wake = app.buttons["dismiss-screensaver"]
         XCTAssertTrue(wake.waitForExistence(timeout: 5))
+        XCTAssertEqual(wake.frame.midX, app.frame.midX, accuracy: 4)
+        XCTAssertGreaterThan(wake.frame.midY, app.frame.maxY - 95)
+        let logo = app.descendants(matching: .any).matching(identifier: "screensaver-logo").firstMatch
+        XCTAssertTrue(logo.waitForExistence(timeout: 5))
+        let start = logo.frame.origin
+        let moving = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            abs(logo.frame.minX - start.x) + abs(logo.frame.minY - start.y) > 8
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [moving], timeout: 6), .completed)
         attach("Screensaver-preview")
         wake.tap()
         XCTAssertTrue(show.waitForExistence(timeout: 5))
+    }
+
+    func testReorderSystemsInBrowsingSettings() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-preview"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        let settings = app.buttons["open-settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 20))
+        settings.tap()
+        app.buttons["settings-Customise browsing"].tap()
+        let mame = app.cells.containing(.switch, identifier: "MAME / Arcade").firstMatch
+        let fbneo = app.cells.containing(.switch, identifier: "FinalBurn Neo").firstMatch
+        XCTAssertTrue(mame.waitForExistence(timeout: 5))
+        XCTAssertTrue(fbneo.exists)
+        let handle = fbneo.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+        let target = mame.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.18))
+        handle.press(forDuration: 0.6, thenDragTo: target)
+        XCTAssertLessThan(fbneo.frame.midY, mame.frame.midY)
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["save-exit"].tap()
+        let first = app.buttons["nav-FinalBurn Neo"]
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        XCTAssertLessThan(first.frame.midX, app.buttons["nav-MAME / Arcade"].frame.midX)
     }
 
     private func attach(_ name: String) {

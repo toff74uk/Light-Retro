@@ -2,7 +2,6 @@ import SwiftUI
 
 struct AppearanceView: View {
     @EnvironmentObject private var store: LibraryStore
-    let previewScreensaver: () -> Void
     @State private var strength: Double?
     @State private var brightness: Double?
 
@@ -47,11 +46,6 @@ struct AppearanceView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Library preview").font(.headline)
                         LibraryAppearancePreview(profile: previewProfile, games: store.data.games, narrow: narrow)
-                        Button(action: previewScreensaver) {
-                            Label("Preview screensaver", systemImage: "moon.stars")
-                                .frame(minHeight: 36)
-                        }
-                        .buttonStyle(.bordered)
                     }
                     .padding(narrow ? 8 : 16)
                     .frame(maxWidth: 560, alignment: .leading)
