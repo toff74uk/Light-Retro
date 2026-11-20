@@ -106,7 +106,8 @@ struct PlayerView: View {
     @StateObject private var session = GameSession()
     @State private var showControls = true
     @State private var overlayVisible = true
-    @State private var lastOverlayActivity = ContinuousClock.now
+    @State private var pendingHide: Task<Void, Never>?
+    @State private var dpadMode = false
     @State private var choosingLayout = false
     @State private var confirmReset = false
     @State private var confirmDiscard = false
@@ -137,19 +138,23 @@ struct PlayerView: View {
                 Button("Cancel", role: .cancel) {}
             }
     }
-    private var hideDeadline: ContinuousClock.Instant? {
-        guard overlayVisible, !session.paused, !choosingLayout, session.message == nil,
-              phase == .active, !input.touchingControls else { return nil }
-        return lastOverlayActivity.advanced(by: .seconds(5))
-    }
-    private func revealOverlay() {
-        lastOverlayActivity = .now
+    private func revealOverlay() { refreshOverlay(touching: input.touchingControls) }
+
+    private func refreshOverlay(touching: Bool) {
+        pendingHide?.cancel()
+        guard !session.paused else { return }
         overlayVisible = true
+        guard !touching, !choosingLayout, session.message == nil else { return }
+        pendingHide = Task { @MainActor in
+            do { try await Task.sleep(for: .seconds(5)) } catch { return }
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.2)) { overlayVisible = false }
+        }
     }
 
     private var touchPad: some View {
         TouchControls(system: activeSystem, count: buttons, fbneoInputs: session.fbneoInputs,
-                      onModeChange: revealOverlay)
+                      dpadMode: $dpadMode, onModeChange: revealOverlay)
     }
 
     var body: some View {
@@ -158,16 +163,20 @@ struct PlayerView: View {
             ZStack {
                 GameScreen(engine: session.engine)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
-                    .onTapGesture { revealOverlay() }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Game screen")
-                    .accessibilityHint("Tap to show the game controls")
-                    .accessibilityIdentifier("game-viewport")
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .overlay {
+                        if !session.paused {
+                            Color.clear.contentShape(Rectangle())
+                                .onTapGesture { revealOverlay() }
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel("Game screen")
+                                .accessibilityHint("Tap to show the game controls")
+                                .accessibilityIdentifier("game-viewport")
+                        }
+                    }
                     .ignoresSafeArea()
-                    .allowsHitTesting(!session.paused)
-                    .accessibilityHidden(session.paused)
-                if !session.paused {
+                if !session.paused && overlayVisible {
                     VStack(spacing: 0) {
                         HStack(spacing: 2) {
                             if showControls { systemKeys }
@@ -198,7 +207,7 @@ struct PlayerView: View {
                                 Image(systemName: "gearshape.fill").font(.title2).frame(width: 44, height: 44)
                             }.accessibilityLabel(activeSystem == .arcade ? "MAME setup" : "Emulator setup")
                                 .accessibilityIdentifier("emulator-setup")
-                        }.foregroundStyle(.white).padding(.horizontal, portrait ? 6 : 12)
+                        }.foregroundStyle(.white.opacity(0.76)).padding(.horizontal, portrait ? 6 : 12)
                         Spacer(minLength: 0)
                         if showControls {
                             touchPad.frame(height: min(220, max(0, geometry.size.height - 56)))
@@ -206,9 +215,7 @@ struct PlayerView: View {
                                 .padding(.bottom, portrait ? 0 : 12)
                         }
                     }
-                    .opacity(overlayVisible ? 0.76 : 0)
-                    .allowsHitTesting(overlayVisible)
-                    .accessibilityHidden(!overlayVisible)
+                    .transition(.opacity)
                 }
                 if session.configuring {
                     setupPanel
@@ -217,19 +224,18 @@ struct PlayerView: View {
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20)).padding(8)
                 }
             }
+            .onChange(of: portrait) { _ in revealOverlay() }
         }.statusBarHidden()
             .onAppear { showControls = input.names.isEmpty; session.open(game, store: store, input: input) }
-            .onChange(of: session.paused) { paused in if !paused { revealOverlay() } }
-            .onChange(of: choosingLayout) { choosing in if !choosing { revealOverlay() } }
-            .onChange(of: session.message) { message in if message == nil { revealOverlay() } }
-            .onReceive(input.$touchingControls.dropFirst()) { _ in lastOverlayActivity = .now }
-            .task(id: hideDeadline) { [deadline = hideDeadline] in
-                guard let deadline else { return }
-                do { try await ContinuousClock().sleep(until: deadline) } catch { return }
-                guard !Task.isCancelled, hideDeadline == deadline else { return }
-                withAnimation(.easeOut(duration: 0.2)) { overlayVisible = false }
+            .onChange(of: session.paused) { _ in revealOverlay() }
+            .onChange(of: choosingLayout) { _ in revealOverlay() }
+            .onChange(of: session.message) { _ in revealOverlay() }
+            .onReceive(input.$touchingControls.dropFirst()) { held in refreshOverlay(touching: held) }
+            .onDisappear {
+                pendingHide?.cancel()
+                if session.loaded { session.pause(); session.automaticSave() }
+                session.stop(input: input)
             }
-            .onDisappear { if session.loaded { session.pause(); session.automaticSave() }; session.stop(input: input) }
             .onChange(of: phase) { value in
                 if value == .inactive {
                     input.clear(); session.pause(); session.automaticSave(); session.engine.finishGraphics()
@@ -352,6 +358,7 @@ private struct TouchControls: View {
     let system: GameSystem
     let count: Int
     let fbneoInputs: [Int]
+    @Binding var dpadMode: Bool
     let onModeChange: () -> Void
     @EnvironmentObject private var store: LibraryStore
     var body: some View {
@@ -368,7 +375,7 @@ private struct TouchControls: View {
                            (width - pad - spacingBudget - 10) / columns,
                            (height - (shoulders ? 48 : 0)) / rows)
             TouchLayout(system: system, face: face, step: max(1, step), padWidth: pad,
-                        response: store.profile.controlResponse ?? .standard, onModeChange: onModeChange)
+                        response: store.profile.controlResponse ?? .standard, dpadMode: $dpadMode, onModeChange: onModeChange)
                 .frame(maxHeight: height).frame(maxHeight: .infinity, alignment: .bottom)
         }
     }
@@ -380,12 +387,12 @@ private struct TouchLayout: View {
     let step: CGFloat
     let padWidth: CGFloat
     let response: ControlResponse
+    @Binding var dpadMode: Bool
     let onModeChange: () -> Void
     private var stickMode: TouchStickMode {
         if system.isArcade { return .arcade }
         return system == .n64 && !dpadMode ? .analogue : .directional
     }
-    @State private var dpadMode = false
     @EnvironmentObject private var input: ControllerHub
 
     var body: some View {
@@ -487,6 +494,7 @@ private struct PadKey: View {
                 Capsule().strokeBorder(tint.opacity(0.95), lineWidth: down ? 3 : 1.5)
             }
             .frame(width: width, height: height)
+            .opacity(0.76)
             .overlay { TouchButtonSurface(change: change) }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(label).accessibilityAddTraits(.isButton)
@@ -546,7 +554,7 @@ struct TouchStick: View {
                 Circle().fill(.white.opacity(0.10))
                 Circle().strokeBorder(.white.opacity(0.25),lineWidth: 1)
                 Circle().fill(.white.opacity(0.35)).frame(width: 48,height: 48).offset(offset)
-            }.contentShape(Circle())
+            }.opacity(0.76).contentShape(Circle())
                 .gesture(DragGesture(minimumDistance: 0)
                     .updating($stickDown) { _, down, _ in down = true }
                     .onChanged { value in

@@ -10,6 +10,11 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(game.waitForExistence(timeout: 20))
         game.tap()
         app.buttons["play-selected"].tap()
+        // The simulator can have a hardware controller attached. Explicitly
+        // enable the touch pad before exercising its idle behaviour.
+        let toggle = app.switches["Touch controls"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        if (toggle.value as? String) != "1" { toggle.tap() }
         app.buttons["Continue playing"].tap()
 
         let viewport = app.descendants(matching: .any).matching(identifier: "game-viewport").firstMatch
@@ -19,6 +24,8 @@ final class LibraryUITests: XCTestCase {
         XCTAssertEqual(viewport.frame.width, app.frame.width, accuracy: 2)
         XCTAssertEqual(viewport.frame.height, app.frame.height, accuracy: 2)
 
+        let centre = CGVector(dx: 0.5, dy: 0.5)
+        viewport.coordinate(withNormalizedOffset: centre).tap()
         action.press(forDuration: 6)
         XCTAssertTrue(action.isHittable)
         XCTAssertTrue(stick.isHittable)
@@ -26,7 +33,6 @@ final class LibraryUITests: XCTestCase {
             !stick.exists && !action.exists && !app.buttons["Pause game"].exists
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 8), .completed)
-        let centre = CGVector(dx: 0.5, dy: 0.5)
         viewport.coordinate(withNormalizedOffset: centre).tap()
         XCTAssertTrue(stick.waitForExistence(timeout: 3))
         XCUIDevice.shared.orientation = .landscapeLeft
@@ -66,6 +72,7 @@ final class LibraryUITests: XCTestCase {
         XCTAssertFalse(sixth.exists)
         verifyToolbar(in: app)
         XCUIDevice.shared.orientation = .portrait
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         // A native tap synchronises with the rotation animation. Verify it
         // actually opens the menu and changes the visible gameplay buttons.
         layout.tap()
