@@ -1,6 +1,46 @@
 import XCTest
 
 final class LibraryUITests: XCTestCase {
+    func testGameplayFitsScreenAndWakesAfterIdle() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-preview", "--paused-game"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        let game = app.buttons["game-sf2"]
+        XCTAssertTrue(game.waitForExistence(timeout: 20))
+        game.tap()
+        app.buttons["play-selected"].tap()
+        app.buttons["Continue playing"].tap()
+
+        let viewport = app.descendants(matching: .any).matching(identifier: "game-viewport").firstMatch
+        let stick = app.descendants(matching: .any).matching(identifier: "pad-stick").firstMatch
+        let action = app.descendants(matching: .any).matching(identifier: "pad-1").firstMatch
+        XCTAssertTrue(action.waitForExistence(timeout: 5))
+        XCTAssertEqual(viewport.frame.width, app.frame.width, accuracy: 2)
+        XCTAssertEqual(viewport.frame.height, app.frame.height, accuracy: 2)
+
+        action.press(forDuration: 6)
+        XCTAssertTrue(action.isHittable)
+        XCTAssertTrue(stick.isHittable)
+        let hidden = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            !stick.exists && !action.exists && !app.buttons["Pause game"].exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 8), .completed)
+        let centre = CGVector(dx: 0.5, dy: 0.5)
+        viewport.coordinate(withNormalizedOffset: centre).tap()
+        XCTAssertTrue(stick.waitForExistence(timeout: 3))
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let rotated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.frame.width > app.frame.height &&
+                abs(viewport.frame.width - app.frame.width) <= 2 &&
+                abs(viewport.frame.height - app.frame.height) <= 2
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [rotated], timeout: 5), .completed)
+        viewport.coordinate(withNormalizedOffset: centre).tap()
+        app.buttons["Pause game"].tap()
+        XCTAssertTrue(app.buttons["pause-save-exit"].waitForExistence(timeout: 3))
+    }
+
     func testArcadeLayoutSwitchInBothOrientations() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-preview", "--paused-game"]
@@ -46,6 +86,7 @@ final class LibraryUITests: XCTestCase {
     }
 
     private func verifyToolbar(in app: XCUIApplication) {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let coin = app.buttons["COIN"]
         let start = app.buttons["START"]
         let setup = app.buttons["emulator-setup"]

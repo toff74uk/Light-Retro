@@ -2,6 +2,24 @@ import XCTest
 @testable import LightRetro
 
 final class TouchPadTests: XCTestCase {
+    @MainActor func testIdleBeginsAfterLastTouchIncludingCentredStick() {
+        let hub = ControllerHub()
+        XCTAssertFalse(hub.touchingControls)
+        hub.setStickContact(true)
+        hub.moveTouchStick(x: 0, y: 0, mode: .analogue, response: .standard)
+        XCTAssertTrue(hub.touchingControls)
+        hub.setTouch(3, down: true)
+        hub.setTouchC(4, down: true)
+        hub.setStickContact(false)
+        hub.setTouch(3, down: false)
+        XCTAssertTrue(hub.touchingControls)
+        hub.setTouchC(4, down: false)
+        XCTAssertFalse(hub.touchingControls)
+        hub.setStickContact(true)
+        hub.clear()
+        XCTAssertFalse(hub.touchingControls)
+    }
+
     func testArcadeCountsOrderAndCoreAssignments() {
         let fighter = [1, 9, 10, 0, 8, 11]
         for count in 2...6 {
