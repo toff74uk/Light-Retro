@@ -181,6 +181,8 @@ struct PlayerProfile: Identifiable, Codable {
     var darkText: Bool?
     var hiddenSystems: Set<GameSystem>?
     var systemOrder: [String]?
+    // Optional profile preference: nil preserves the original two-column layout.
+    var showCategoryColumn: Bool?
     var screensaverMinutes: Int?
     var controlResponse: ControlResponse?
     var largeTouchButtons: Bool?
@@ -192,6 +194,14 @@ struct PlayerProfile: Identifiable, Codable {
         var remaining = Set(playable)
         let saved = systemOrder.compactMap(GameSystem.init(rawValue:)).filter { remaining.remove($0) != nil }
         return saved + playable.filter { remaining.contains($0) }
+    }
+
+    mutating func moveSystem(_ system: GameSystem, offset: Int) {
+        var systems = orderedSystems
+        guard let index = systems.firstIndex(of: system),
+              systems.indices.contains(index + offset) else { return }
+        systems.swapAt(index, index + offset)
+        systemOrder = systems.map(\.rawValue)
     }
 
     func touchButtonOverride(for game: Game) -> Int? {

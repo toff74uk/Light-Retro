@@ -72,6 +72,11 @@ import UniformTypeIdentifiers
         change(&data.profiles[index])
         persist()
     }
+    func selectProfile(_ id: UUID) {
+        guard data.profiles.contains(where: { $0.id == id }) else { return }
+        data.currentProfile = id
+        persist()
+    }
     func addProfile(_ name: String) {
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
