@@ -396,30 +396,82 @@ private struct BIOSView: View {
 struct ProfilesView: View {
     @EnvironmentObject private var store: LibraryStore
     @Environment(\.dismiss) private var dismiss
+    // Settings already has a NavigationStack. Only the library's full-screen
+    // profile editor needs its own; nesting stacks broke destination handling.
+    var standalone = false
     @State private var name = ""
     @State private var rename = ""
+
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Who's playing?") {
-                    ForEach(store.data.profiles) { p in
-                        Button { store.data.currentProfile = p.id; store.persist(); rename = p.name } label: {
-                            HStack { Label(p.name, systemImage: "person.crop.circle"); Spacer(); if p.id == store.profile.id { Image(systemName: "checkmark.circle.fill") } }
+        Group {
+            if standalone {
+                NavigationStack {
+                    editor
+                        .navigationTitle("Profiles")
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { dismiss() }
+                            }
                         }
+                }
+            } else {
+                editor
+            }
+        }
+        .onAppear { rename = store.profile.name }
+        .onChange(of: store.data.currentProfile) { _, _ in
+            rename = store.profile.name
+        }
+    }
+
+    private var editor: some View {
+        Form {
+            Section("Who's playing?") {
+                ForEach(store.data.profiles) { player in
+                    Button {
+                        store.selectProfile(player.id)
+                        rename = store.profile.name
+                    } label: {
+                        HStack {
+                            Label(player.name, systemImage: "person.crop.circle")
+                            Spacer()
+                            if player.id == store.profile.id {
+                                Image(systemName: "checkmark.circle.fill")
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .accessibilityIdentifier("profile-\(player.id)")
+                }
+            }
+            Section("New player") {
+                TextField("Name", text: $name)
+                    .accessibilityIdentifier("profile-new-name")
+                Button("Add player") {
+                    store.addProfile(name)
+                    name = ""
+                    rename = store.profile.name
+                }
+                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .accessibilityIdentifier("profile-add")
+            }
+            Section("Rename current player") {
+                TextField("Name", text: $rename)
+                    .accessibilityIdentifier("profile-rename")
+                Button("Save name") {
+                    let trimmed = rename.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        store.updateProfile { $0.name = String(trimmed.prefix(40)) }
                     }
                 }
-                Section("New player") {
-                    TextField("Name", text: $name)
-                    Button("Add player") { store.addProfile(name); name = ""; rename = store.profile.name }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                Section("Rename current player") {
-                    TextField("Name", text: $rename)
-                    Button("Save name") { let value = rename.trimmingCharacters(in: .whitespacesAndNewlines); if !value.isEmpty { store.updateProfile { $0.name = String(value.prefix(40)) } } }
-                }
-                Section { Text("Players share the game library. Favourites, recently played games, colours, handedness and saves are separate.").font(.footnote) }
-            }.navigationTitle("Players").onAppear { rename = store.profile.name }
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+                .disabled(rename.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            Section {
+                Text("Players share the game library. Favourites, recently played games, colours, layouts, system order and saves are separate.")
+                    .font(.footnote)
+            }
         }
+        .navigationTitle("Profiles")
     }
 }
 
