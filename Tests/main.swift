@@ -53,6 +53,12 @@ check(catalogue.collections.count == 11, "Android collections plus Mega Drive So
 check(catalogue.collections.contains { $0.contains(streetFighter) }, "Curated collections use ROM identity")
 check(GameCatalogue.displayTitle(canonical: "Example Game (2004/09/24)", fileName: "example.zip") == "Example Game (2004/09/24)", "Preserve slashes and full canonical arcade titles")
 check(GameCatalogue.displayTitle(canonical: nil, fileName: "Sonic_the_Hedgehog (USA).md") == "Sonic the Hedgehog", "Uncatalogued games still use cleaned filenames")
+
+let legacyArcade = Game(title: "24)", system: .arcade, relativePath: "example.zip", catalogueTitle: "Example Game (2004/09/24)")
+check(GameCatalogue.repairLegacyArcadeTitle(legacyArcade).title == "Example Game (2004/09/24)", "Existing libraries repair truncated arcade titles")
+let intentionallyRenamed = Game(title: "My own name", system: .arcade, relativePath: "example.zip", catalogueTitle: "Example Game (2004/09/24)")
+check(GameCatalogue.repairLegacyArcadeTitle(intentionallyRenamed).title == "My own name", "Preserve unrelated saved game titles")
+
 let sonicCollection = catalogue.collections.first { $0.title == "Sonic Games" }!
 let segaCollection = catalogue.collections.first { $0.title == "Sega Games" }!
 let sonicMega = Game(title: "Sonic the Hedgehog 2", system: .mega, relativePath: "Sonic the Hedgehog 2 (USA).md")
