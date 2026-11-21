@@ -175,32 +175,211 @@ struct ControlOptions: View {
 
 private struct AppearanceView: View {
     @EnvironmentObject private var store: LibraryStore
+    private var palette: RetroPalette { RetroPalette(profile: store.profile) }
+    private var compact: Bool { store.profile.compactTiles ?? true }
+    private var showCategories: Bool { store.profile.showCategoryColumn ?? true }
+    private var shownSystems: [GameSystem] {
+        store.profile.orderedPlayableSystems.filter { !(store.profile.hiddenSystems ?? []).contains($0) }
+    }
+
     var body: some View {
-        Form {
-            Section("Brand colour") {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 9) {
-                    ForEach(RetroPalette.colours, id: \.1) { name, hex in
-                        Button { store.updateProfile { $0.colourHex = hex } } label: {
-                            var sample = store.profile
-                            let _ = sample.colourHex = hex
-                            Rectangle().fill(RetroPalette(profile: sample).tone()).frame(height: 34)
-                                .overlay(Rectangle().stroke(store.profile.colourHex == hex ? .white : .clear, lineWidth: 3))
-                        }.buttonStyle(.plain).accessibilityLabel(name)
+        GeometryReader { geometry in
+            let landscape = geometry.size.width > geometry.size.height
+            Group {
+                if landscape {
+                    HStack(alignment: .top, spacing: 14) {
+                        options.frame(width: max(240, geometry.size.width * 0.42))
+                        livePreview
+                    }
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            options.frame(height: 420)
+                            livePreview.frame(height: 310)
+                        }
                     }
                 }
-                HStack { Text("Strength"); Slider(value: binding(\.colourStrength), in: 0...1) }
-                HStack { Text("Brightness"); Slider(value: binding(\.brightness), in: 0.3...1) }
-                Toggle("Dark text", isOn: Binding(get: { store.profile.darkText ?? false }, set: { value in store.updateProfile { $0.darkText = value } }))
-                Text("Preview").font(.headline).frame(maxWidth: .infinity, minHeight: 75).foregroundStyle(RetroPalette(profile: store.profile).text).background(RetroPalette(profile: store.profile).background)
             }
-            Section("Layout") {
-                Toggle("Left-handed navigation", isOn: Binding(get: { store.profile.leftHanded }, set: { value in store.updateProfile { $0.leftHanded = value } }))
-                Toggle("Compact game tiles", isOn: Binding(get: { store.profile.compactTiles ?? true }, set: { value in store.updateProfile { $0.compactTiles = value } }))
-                Text("Landscape uses the Android-style system, category and game columns. Portrait keeps the same collection with scrolling menus.").font(.footnote)
+            .padding(12)
+        }
+        .foregroundStyle(palette.text)
+        .background(palette.background.ignoresSafeArea())
+    }
+
+    private var options: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Colours").font(.headline)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 7), count: 8), spacing: 7) {
+                    ForEach(RetroPalette.colours, id: \.1) { name, hex in
+                        Button {
+                            store.updateProfile { $0.colourHex = hex }
+                        } label: {
+                            var sample = store.profile
+                            let _ = sample.colourHex = hex
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(RetroPalette(profile: sample).tone())
+                                .frame(height: 33)
+                                .overlay(RoundedRectangle(cornerRadius: 5).stroke(store.profile.colourHex == hex ? .white : .clear, lineWidth: 3))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(name)
+                    }
+                }
+                HStack {
+                    Text("Strength").frame(width: 80, alignment: .leading)
+                    Slider(value: binding(\.colourStrength), in: 0...1)
+                }
+                HStack {
+                    Text("Brightness").frame(width: 80, alignment: .leading)
+                    Slider(value: binding(\.brightness), in: 0.3...1)
+                }
+                Toggle("Dark text", isOn: Binding(
+                    get: { store.profile.darkText ?? false },
+                    set: { value in store.updateProfile { $0.darkText = value } }
+                ))
+                Divider()
+                Text("Library layout").font(.headline)
+                Toggle("Left-handed navigation", isOn: Binding(
+                    get: { store.profile.leftHanded },
+                    set: { value in store.updateProfile { $0.leftHanded = value } }
+                ))
+                Toggle("Compact game tiles", isOn: Binding(
+                    get: { store.profile.compactTiles ?? true },
+                    set: { value in store.updateProfile { $0.compactTiles = value } }
+                ))
+                Toggle("Show categories column", isOn: Binding(
+                    get: { showCategories },
+                    set: { value in store.updateProfile { $0.showCategoryColumn = value } }
+                ))
+                Text("Changes appear in the library preview on the right and are saved to this profile.")
+                    .font(.caption)
+                    .opacity(0.8)
+            }
+            .padding(10)
+        }
+        .background(palette.tile.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var livePreview: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Live library preview").font(.headline)
+            HStack(alignment: .top, spacing: 6) {
+                if !store.profile.leftHanded { previewRails }
+                previewGames
+                if store.profile.leftHanded { previewRails }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(palette.background, in: RoundedRectangle(cornerRadius: 9))
+            .overlay(RoundedRectangle(cornerRadius: 9).stroke(palette.text.opacity(0.3), lineWidth: 1))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var previewRails: some View {
+        HStack(alignment: .top, spacing: 5) {
+            VStack(spacing: 5) {
+                ForEach(shownSystems.prefix(7), id: \.self) { system in
+                    Text(system.title)
+                        .font(.system(size: 9, weight: .medium))
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, minHeight: 27, alignment: .leading)
+                        .padding(.horizontal, 5)
+                        .background(system == shownSystems.first ? palette.selected : palette.tile)
+                }
+            }.frame(maxWidth: 105)
+            if showCategories {
+                VStack(spacing: 5) {
+                    ForEach(["All ROMs", "Collections", "Favourites", "Recently played"], id: \.self) { category in
+                        Text(category)
+                            .font(.system(size: 9, weight: .medium))
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, minHeight: 27, alignment: .leading)
+                            .padding(.horizontal, 5)
+                            .background(category == "All ROMs" ? palette.selected : palette.tile)
+                    }
+                }.frame(maxWidth: 98)
             }
         }
+        .frame(maxWidth: showCategories ? 209 : 105, alignment: .leading)
     }
-    private func binding(_ key: WritableKeyPath<PlayerProfile, Double?>) -> Binding<Double> { Binding(get: { store.profile[keyPath: key] ?? 1 }, set: { value in store.updateProfile { $0[keyPath: key] = value } }) }
+
+    private var previewGames: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Text("Games").font(.system(size: 11, weight: .bold))
+                Spacer()
+                Image(systemName: "magnifyingglass")
+                Image(systemName: "gearshape")
+            }.font(.system(size: 11))
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: compact ? 3 : 2), spacing: 5) {
+                ForEach(Array([GameSystem.arcade, .mega, .n64, .snes, .nes, .fbneo].enumerated()), id: \.offset) { index, system in
+                    VStack(spacing: 3) {
+                        Image("system_\(system.rawValue)")
+                            .resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: compact ? 45 : 62)
+                        Text("Game \(index + 1)")
+                            .font(.system(size: compact ? 8 : 10))
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: compact ? 61 : 80)
+                    .padding(3)
+                    .background(palette.tile)
+                }
+            }
+            Spacer(minLength: 0)
+        }.frame(maxWidth: .infinity, alignment: .top)
+    }
+
+    private func binding(_ key: WritableKeyPath<PlayerProfile, Double?>) -> Binding<Double> {
+        Binding(get: { store.profile[keyPath: key] ?? 1 }, set: { value in store.updateProfile { $0[keyPath: key] = value } })
+    }
+}
+
+private struct ScreensaverOptionsView: View {
+    @EnvironmentObject private var store: LibraryStore
+    @State private var previewing = false
+
+    var body: some View {
+        Form {
+            Section("Start after") {
+                Picker("Idle time", selection: Binding(
+                    get: { store.profile.screensaverMinutes ?? 0 },
+                    set: { value in store.updateProfile { $0.screensaverMinutes = value } }
+                )) {
+                    Text("Off").tag(0)
+                    Text("2 minutes").tag(2)
+                    Text("5 minutes").tag(5)
+                    Text("10 minutes").tag(10)
+                }
+            }
+            Section("Animated screensaver preview") {
+                RetroScreensaver(preview: true)
+                    .frame(height: 170)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .allowsHitTesting(false)
+                Button("Preview full screen") { previewing = true }
+                    .accessibilityIdentifier("screensaver-preview")
+                Text("The Light logo moves across the screen. The clock remains centred; the exit message stays at the bottom.")
+                    .font(.footnote)
+            }
+            Section {
+                Text("Tap the screen or use your controller to return from the active screensaver. Your iPhone’s Auto-Lock setting still applies.")
+                    .font(.footnote)
+            }
+        }
+        .fullScreenCover(isPresented: $previewing) {
+            RetroScreensaver(onExit: { previewing = false })
+                .ignoresSafeArea()
+                .overlay(alignment: .topTrailing) {
+                    Button { previewing = false } label: {
+                        Label("Close preview", systemImage: "xmark.circle.fill").labelStyle(.iconOnly).font(.title2)
+                    }
+                    .tint(.white)
+                    .padding(20)
+                }
+        }
+    }
 }
 
 private struct BIOSView: View {
