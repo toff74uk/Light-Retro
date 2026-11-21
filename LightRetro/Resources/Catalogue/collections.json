@@ -417,5 +417,91 @@
       "Super Famicom Wars",
       "Super Mario Collection"
     ]
+  },
+  {
+    "title": "Sonic Games",
+    "systems": [
+      "mega"
+    ],
+    "roms": [],
+    "names": [
+      "Dr. Robotnik's Mean Bean Machine",
+      "Dr Robotnik's Mean Bean Machine",
+      "Dr. Robotniks Mean Bean Machine",
+      "Sonic Classics",
+      "Sonic Compilation"
+    ],
+    "titlePrefixes": [
+      "Sonic"
+    ]
+  },
+  {
+    "title": "Sega Games",
+    "systems": [
+      "mega"
+    ],
+    "roms": [],
+    "names": [
+      "The Revenge of Shinobi",
+      "Revenge of Shinobi, The",
+      "Shadow Dancer - The Secret of Shinobi",
+      "Altered Beast",
+      "Kid Chameleon",
+      "Ristar",
+      "Gunstar Heroes",
+      "Dynamite Headdy",
+      "The Ooze",
+      "Ooze, The",
+      "Comix Zone",
+      "Flicky",
+      "Alien Storm",
+      "Decap Attack",
+      "QuackShot Starring Donald Duck",
+      "Castle of Illusion Starring Mickey Mouse",
+      "World of Illusion Starring Mickey Mouse and Donald Duck",
+      "World of Illusion Starring Mickey Mouse & Donald Duck",
+      "Super Hang-On",
+      "Super Hang On",
+      "Virtua Racing",
+      "Sega Classics Arcade Collection",
+      "Light Crusader",
+      "Landstalker",
+      "Shining in the Darkness",
+      "Beyond Oasis",
+      "The Story of Thor",
+      "Story of Thor, The",
+      "Monster World IV",
+      "Dr. Robotnik's Mean Bean Machine",
+      "Dr Robotnik's Mean Bean Machine",
+      "Dr. Robotniks Mean Bean Machine",
+      "Sonic Classics",
+      "Sonic Compilation"
+    ],
+    "titlePrefixes": [
+      "Sonic",
+      "Streets of Rage",
+      "Golden Axe",
+      "Ecco",
+      "Phantasy Star",
+      "Shining Force",
+      "Columns",
+      "Vectorman",
+      "OutRun",
+      "Out Run",
+      "Space Harrier",
+      "After Burner",
+      "Wonder Boy",
+      "Alex Kidd",
+      "ToeJam & Earl",
+      "Toejam and Earl",
+      "Bonanza Bros",
+      "Shinobi",
+      "ESWAT",
+      "Comix Zone",
+      "Sega"
+    ],
+    "publisherPrefixes": [
+      "Sega"
+    ]
   }
 ]

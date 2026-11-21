@@ -45,7 +45,7 @@ def verify_bundle(app, signed=False):
     assert 'cap-33s-2' in discs['sfiii3']['discs'] and 'sfrush' in discs['sfrush']['discs'], 'Missing MAME CHD data'
     boards = json.loads((catalogue / 'fbneo-boards.json').read_text())
     assert len(set().union(*boards.values())) == 1839, 'Missing Android FBNeo routing data'
-    assert len(json.loads((catalogue / 'collections.json').read_text())) == 9, 'Missing curated collections'
+    assert len(json.loads((catalogue / 'collections.json').read_text())) == 11, 'Missing arcade, SNES or Mega Drive curated collections'
     assert (app / 'PrivacyInfo.xcprivacy').is_file(), 'Missing privacy manifest'
     assert (app / 'Licenses').is_dir(), 'Missing licences'
     if signed:
