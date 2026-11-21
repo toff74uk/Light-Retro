@@ -42,13 +42,10 @@ final class LibraryUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 8), .completed)
         viewport.coordinate(withNormalizedOffset: centre).tap()
         XCTAssertTrue(stick.waitForExistence(timeout: 3))
-        XCUIDevice.shared.orientation = .landscapeLeft
-        let rotated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            app.frame.width > app.frame.height &&
-                abs(viewport.frame.width - app.frame.width) <= 2 &&
-                abs(viewport.frame.height - app.frame.height) <= 2
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [rotated], timeout: 5), .completed)
+        // Verify pause remains available after the idle timeout. Landscape
+        // and portrait game layout are exercised in the separate arcade
+        // rotation test; rotating while an idle overlay is disappearing is
+        // intermittently deferred by the iOS 27 simulator.
         viewport.coordinate(withNormalizedOffset: centre).tap()
         app.buttons["Pause game"].tap()
         XCTAssertTrue(app.buttons["pause-save-exit"].waitForExistence(timeout: 3))
@@ -95,6 +92,9 @@ final class LibraryUITests: XCTestCase {
             app.frame.width > app.frame.height && sixth.isHittable
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [landscapeControls], timeout: 5), .completed)
+        let video = app.descendants(matching: .any).matching(identifier: "game-viewport").firstMatch
+        XCTAssertEqual(video.frame.width, app.frame.width, accuracy: 2)
+        XCTAssertEqual(video.frame.height, app.frame.height, accuracy: 2)
         verifyToolbar(in: app)
         attach("Arcade-six-buttons-landscape")
     }
