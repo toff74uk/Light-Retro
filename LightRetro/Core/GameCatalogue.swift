@@ -5,9 +5,24 @@ struct GameCollection: Codable, Identifiable {
     var systems: [GameSystem]
     var roms: Set<String>
     var names: [String]
+    // Optional so the original Android collections continue to decode unchanged.
+    var titlePrefixes: [String]?
+    var publisherPrefixes: [String]?
     var id: String { title }
     func contains(_ game: Game) -> Bool {
-        systems.contains(game.system) && (roms.contains(game.romStem.lowercased()) || names.contains { GameCatalogue.normalise($0) == GameCatalogue.normalise(game.displayTitle) })
+        guard systems.contains(game.system) else { return false }
+        let title = GameCatalogue.normalise(game.displayTitle)
+        let publisher = GameCatalogue.normalise(game.maker ?? "")
+        return roms.contains(game.romStem.lowercased()) ||
+            names.contains { GameCatalogue.normalise($0) == title } ||
+            (titlePrefixes?.contains {
+                let prefix = GameCatalogue.normalise($0)
+                return title == prefix || title.hasPrefix(prefix + " ")
+            } ?? false) ||
+            (publisherPrefixes?.contains {
+                let prefix = GameCatalogue.normalise($0)
+                return !publisher.isEmpty && (publisher == prefix || publisher.hasPrefix(prefix + " "))
+            } ?? false)
     }
 }
 
@@ -68,6 +83,12 @@ final class GameCatalogue {
             }
         }
     }
+    static func displayTitle(canonical: String?, fileName: String) -> String {
+        // Canonical arcade names are labels, not paths: they can contain "/" (e.g. dates).
+        guard let canonical, !canonical.isEmpty else { return LibraryRules.displayName(fileName) }
+        return canonical
+    }
+
     func identify(_ source: Game) -> Game {
         var game = source
         let key = game.romStem.lowercased()
@@ -75,7 +96,7 @@ final class GameCatalogue {
         let canonical = game.system == .fbneo ? (fbneo[key] ?? record?.first) : record?.first
         game.catalogueTitle = canonical
         // Keep revision information in catalogueTitle for artwork and the details page.
-        game.title = canonical.map { LibraryRules.displayName($0 + ".rom") } ?? LibraryRules.displayName(game.fileName)
+        game.title = Self.displayTitle(canonical: canonical, fileName: game.fileName)
         game.year = record.flatMap { $0.count > 1 ? $0[1] : nil }
         game.maker = record.flatMap { $0.count > 2 ? $0[2] : nil }
         let family = game.system.isArcade ? "arcade" : game.system.rawValue
