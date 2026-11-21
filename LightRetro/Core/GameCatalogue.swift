@@ -86,7 +86,7 @@ final class GameCatalogue {
     static func displayTitle(canonical: String?, fileName: String) -> String {
         // Canonical arcade names are labels, not paths: they can contain "/" (e.g. dates).
         guard let canonical, !canonical.isEmpty else { return LibraryRules.displayName(fileName) }
-        return canonical
+        return LibraryRules.cleanTitle(canonical)
     }
 
     static func repairLegacyArcadeTitle(_ source: Game) -> Game {
