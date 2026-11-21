@@ -222,11 +222,15 @@ enum LibraryRules {
     }
     static func displayName(_ filename: String) -> String {
         let stem = ((filename as NSString).lastPathComponent as NSString).deletingPathExtension
-        let clean = stem.replacingOccurrences(of: "_", with: " ")
+        return cleanTitle(stem)
+    }
+    static func cleanTitle(_ title: String) -> String {
+        // Catalogue titles are *not* file paths. Preserve "/" characters in titles and dates.
+        let clean = title.replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: #"\s*\((?:USA|US|Europe|Japan|World|U|E|J|Rev|En|Proto|Beta)\b[^)]*\)"#, with: "", options: [.regularExpression, .caseInsensitive])
             .replacingOccurrences(of: #"\s*\[[^\]]*\]"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
-        return clean.isEmpty ? stem : clean
+        return clean.isEmpty ? title : clean
     }
     static func upsert(_ candidate: Game, in games: inout [Game]) {
         if games.contains(where: { $0.folderID == candidate.folderID && $0.relativePath == candidate.relativePath && $0.system == candidate.system }) { return }
