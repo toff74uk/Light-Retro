@@ -96,7 +96,11 @@ struct LibraryView: View {
         .onChange(of: category) { _ in resetSelection() }
         .onChange(of: search) { _ in resetSelection() }
         .onChange(of: store.data.games) { _ in reconcileSelection() }
-        .onChange(of: store.data.currentProfile) { _ in category = "all"; focus = 0; resetSelection() }
+        .onChange(of: store.data.currentProfile) { _ in
+            // A new profile may hide the previously selected system.
+            section = "all"; category = "all"; focus = 0; asleep = false
+            resetSelection()
+        }
         .onChange(of: store.profile.showCategoryColumn) { _ in category = "all"; focus = 0; resetSelection() }
         .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in lastInteraction = Date() })
         .onReceive(clock) { _ in
