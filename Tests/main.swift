@@ -52,6 +52,7 @@ check(!GameSystem.recognises("neogeo.zip", for: .arcade), "Known BIOS not displa
 check(catalogue.collections.count == 11, "Android collections plus Mega Drive Sonic and Sega categories")
 check(catalogue.collections.contains { $0.contains(streetFighter) }, "Curated collections use ROM identity")
 check(GameCatalogue.displayTitle(canonical: "Example Game (2004/09/24)", fileName: "example.zip") == "Example Game (2004/09/24)", "Preserve slashes and full canonical arcade titles")
+check(GameCatalogue.displayTitle(canonical: "Street Fighter II: The World Warrior (World 910522)", fileName: "sf2.zip") == "Street Fighter II: The World Warrior", "Strip arcade region tags without losing slash-containing titles")
 check(GameCatalogue.displayTitle(canonical: nil, fileName: "Sonic_the_Hedgehog (USA).md") == "Sonic the Hedgehog", "Uncatalogued games still use cleaned filenames")
 
 let legacyArcade = Game(title: "24)", system: .arcade, relativePath: "example.zip", catalogueTitle: "Example Game (2004/09/24)")
