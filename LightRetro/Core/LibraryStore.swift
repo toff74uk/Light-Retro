@@ -33,9 +33,13 @@ import UniformTypeIdentifiers
             if fm.fileExists(atPath: file.path) {
                 let decoded = try JSONDecoder().decode(LibraryData.self, from: Data(contentsOf: file))
                 guard decoded.version == 1 else { throw StoreError.message("This library needs a newer version of Light Retro.") }
-                data = decoded
+                var restored = decoded
+                if restored.profiles.isEmpty { restored.profiles = [PlayerProfile(name: "Player 1")] }
+                if !restored.profiles.contains(where: { $0.id == restored.currentProfile }) {
+                    restored.currentProfile = restored.profiles[0].id
+                }
+                data = restored
                 GameCatalogue.shared.updateExistingArcadeRoutes(in: &data)
-                if data.profiles.isEmpty { data.profiles = [PlayerProfile(name: "Player 1")] }
                 for i in data.games.indices {
                     if data.games[i].catalogueTitle == nil {
                         data.games[i] = GameCatalogue.shared.identify(data.games[i])
@@ -63,7 +67,16 @@ import UniformTypeIdentifiers
         do { try JSONEncoder().encode(data).write(to: root.appendingPathComponent("library.json"), options: .atomic) }
         catch { self.error = "Could not save the library: \(error.localizedDescription)" }
     }
-    func updateProfile(_ change: (inout PlayerProfile) -> Void) { change(&data.profiles[profileIndex]); persist() }
+    func updateProfile(_ change: (inout PlayerProfile) -> Void) {
+        let index = profileIndex
+        change(&data.profiles[index])
+        persist()
+    }
+    func selectProfile(_ id: UUID) {
+        guard data.profiles.contains(where: { $0.id == id }) else { return }
+        data.currentProfile = id
+        persist()
+    }
     func addProfile(_ name: String) {
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
@@ -197,6 +210,20 @@ import UniformTypeIdentifiers
         guard fm.fileExists(atPath: access.url.path) else { throw StoreError.message("This game is unavailable. Reconnect its drive or download it in Files, then try again.") }
         try access.prepareConsoleZIP(for: game.system)
         return access
+    }
+    // Existing mixed-folder libraries can play a newly added disc immediately, before a rescan.
+    func resolveArcadeRoute(_ original: Game, archive: URL) -> Game {
+        guard let disc = GameCatalogue.shared.discSet(for: original), let folderID = original.folderID,
+              data.folders.contains(where: { $0.id == folderID && $0.detectSystems == true }) else { return original }
+        var game = original
+        game.hasMAMEDisc = disc.hasCompanion(beside: archive)
+        GameCatalogue.shared.routeAutomaticArcade(&game)
+        game.preserveSaves(from: original)
+        if game != original, let index = data.games.firstIndex(where: { $0.id == game.id }) {
+            data.games[index] = game
+            persist()
+        }
+        return game
     }
     func saveDirectory(for game: Game) throws -> URL {
         var path = savesURL.appendingPathComponent(profile.id.uuidString).appendingPathComponent(game.id.uuidString)

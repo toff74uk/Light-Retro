@@ -73,13 +73,17 @@ enum GameSystem: String, Codable, CaseIterable, Identifiable {
         case .scumm: return ["scumm", "scummvm"]
         }
     }
-    static func detect(rootName: String, relativePath: String) -> GameSystem? {
+    static func namedFolder(rootName: String, relativePath: String) -> GameSystem? {
         let parts = relativePath.split(separator: "/").dropLast().map(String.init)
         for name in ([rootName] + parts).reversed() {
             let key = name.lowercased().filter { $0.isLetter || $0.isNumber }
-            if let system = playable.first(where: { $0.aliases.contains(key) }) {
-                return recognises(relativePath, for: system) ? system : nil
-            }
+            if let system = playable.first(where: { $0.aliases.contains(key) }) { return system }
+        }
+        return nil
+    }
+    static func detect(rootName: String, relativePath: String) -> GameSystem? {
+        if let system = namedFolder(rootName: rootName, relativePath: relativePath) {
+            return recognises(relativePath, for: system) ? system : nil
         }
         let ext = (relativePath as NSString).pathExtension.lowercased()
         let system: GameSystem?
@@ -112,6 +116,11 @@ struct Game: Identifiable, Codable, Equatable {
     var localArtworkPath: String?
     // Older automatic-folder entries may already have save states from another core.
     var originalSaveSystem: GameSystem?
+    var hasMAMEDisc: Bool?
+    var isArcadeDiscCompanion: Bool?
+    mutating func preserveSaves(from previous: Game) {
+        originalSaveSystem = previous.originalSaveSystem ?? (previous.system == system ? nil : previous.system)
+    }
     var alternateSaveFolder: String? {
         guard let originalSaveSystem, originalSaveSystem != system else { return nil }
         return system.rawValue
@@ -171,10 +180,29 @@ struct PlayerProfile: Identifiable, Codable {
     var brightness: Double?
     var darkText: Bool?
     var hiddenSystems: Set<GameSystem>?
+    var systemOrder: [String]?
+    // Optional profile preference: nil preserves the original two-column layout.
+    var showCategoryColumn: Bool?
     var screensaverMinutes: Int?
     var controlResponse: ControlResponse?
     var largeTouchButtons: Bool?
     var arcadeTouchButtons: [String: Int]?
+
+    var orderedSystems: [GameSystem] {
+        let playable = GameSystem.playable
+        guard let systemOrder else { return playable }
+        var remaining = Set(playable)
+        let saved = systemOrder.compactMap(GameSystem.init(rawValue:)).filter { remaining.remove($0) != nil }
+        return saved + playable.filter { remaining.contains($0) }
+    }
+
+    mutating func moveSystem(_ system: GameSystem, offset: Int) {
+        var systems = orderedSystems
+        guard let index = systems.firstIndex(of: system),
+              systems.indices.contains(index + offset) else { return }
+        systems.swapAt(index, index + offset)
+        systemOrder = systems.map(\.rawValue)
+    }
 
     func touchButtonOverride(for game: Game) -> Int? {
         guard game.system.isArcade, let count = arcadeTouchButtons?[game.romStem.lowercased()],

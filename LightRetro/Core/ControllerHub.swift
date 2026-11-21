@@ -11,6 +11,7 @@ struct GamepadState {
 @MainActor final class ControllerHub: ObservableObject {
     @Published var names: [String] = []
     @Published var pressed: Set<Int> = []
+    @Published private(set) var touchingControls = false
     var onMenuInput: ((Int) -> Void)?
     var onGameInput: (([GamepadState]) -> Void)?
     var analogueGameplay = false
@@ -19,6 +20,7 @@ struct GamepadState {
     private var timer: Timer?
     private var previous: Set<Int> = []
     private var touch: Set<Int> = []
+    private var stickContact = false
     private var touchDpad: Set<Int> = []
     private var touchSticks: [Int: [Float]] = [:]
     @Published private(set) var pressedC: Set<Int> = []
@@ -34,11 +36,28 @@ struct GamepadState {
     func setTouch(_ button: Int, down: Bool) {
         guard touch.contains(button) != down else { return }
         if down { touch.insert(button) } else { touch.remove(button) }
+        updateTouchContact()
         poll()
     }
-    func setTouchDirections(_ directions: Set<Int>) {
-        guard touchDpad != directions else { return }
+    func setStickContact(_ down: Bool) {
+        guard stickContact != down else { return }
+        stickContact = down
+        updateTouchContact()
+    }
+    private func updateTouchContact() {
+        // A stick held in its dead zone still counts. A physical controller doesn't.
+        let held = stickContact || !touch.isEmpty || !pressedC.isEmpty
+        if touchingControls != held { touchingControls = held }
+    }
+    func moveTouchStick(x: Float, y: Float, mode: TouchStickMode, response: ControlResponse) {
+        // Arcade cores may read analogue axes (steering) or digital directions (fighters).
+        // Update both before polling so each emulated frame sees the same stick position.
+        let (axisX, axisY) = mode == .directional ? (Float.zero, Float.zero) : response.stick(x: x, y: y)
+        let directions: Set<Int> = mode == .analogue ? [] : response.touchDirections(x: x, y: y)
+        let axes = [axisX, axisY]
+        guard touchDpad != directions || touchSticks[0] != axes else { return }
         touchDpad = directions
+        touchSticks[0] = axes
         poll()
     }
     func setTouchStick(_ stick: Int, x: Float, y: Float) {
@@ -48,10 +67,16 @@ struct GamepadState {
     func setTouchC(_ direction: Int, down: Bool) {
         guard pressedC.contains(direction) != down else { return }
         if down { pressedC.insert(direction) } else { pressedC.remove(direction) }
+        updateTouchContact()
         setTouchStick(1, x: Float((pressedC.contains(7) ? 1 : 0) - (pressedC.contains(6) ? 1 : 0)),
                       y: Float((pressedC.contains(5) ? 1 : 0) - (pressedC.contains(4) ? 1 : 0)))
     }
-    func clear() { touch.removeAll(); touchDpad.removeAll(); touchSticks.removeAll(); pressedC.removeAll(); previous.removeAll(); pressed.removeAll() }
+    func clear() {
+        touch.removeAll(); touchDpad.removeAll(); touchSticks.removeAll(); pressedC.removeAll()
+        stickContact = false
+        updateTouchContact()
+        previous.removeAll(); pressed.removeAll()
+    }
     private func poll() {
         let controllers = GCController.controllers().filter { $0.extendedGamepad != nil }
         let updated = controllers.map { $0.vendorName ?? "Controller" }

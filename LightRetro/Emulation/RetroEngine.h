@@ -1,6 +1,15 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 NS_ASSUME_NONNULL_BEGIN
+@interface LREmulatorOption : NSObject
+@property(nonatomic, readonly) NSString *key;
+@property(nonatomic, readonly) NSString *title;
+@property(nonatomic, readonly) NSString *helpText;
+@property(nonatomic, readonly) NSString *value;
+@property(nonatomic, readonly) NSArray<NSString *> *values;
+@property(nonatomic, readonly) NSArray<NSString *> *labels;
+@end
+
 @interface RetroEngine : NSObject
 @property(nonatomic, readonly) UIView *videoView;
 @property(nonatomic, readonly) double aspectRatio;
@@ -13,6 +22,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)pause;
 - (void)stop;
 - (void)resetGame;
+- (BOOL)toggleMAMEMenu;
+- (NSArray<LREmulatorOption *> *)emulatorOptions;
+- (BOOL)setOption:(NSString *)key value:(NSString *)value NS_SWIFT_NAME(setOption(_:value:));
 - (void)setButton:(NSInteger)button pressed:(BOOL)pressed port:(NSInteger)port;
 - (void)clearButtons;
 - (void)setAxis:(NSInteger)axis value:(float)value stick:(NSInteger)stick port:(NSInteger)port;

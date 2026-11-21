@@ -24,6 +24,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var path: [SettingsPage] = []
     @State private var selected = 0
+    @State private var previewingScreensaver = false
     @State private var columns = 5
     var body: some View {
         NavigationStack(path: $path) {
@@ -53,12 +54,16 @@ struct SettingsView: View {
                 }
         }.onAppear {
             controllers.onMenuInput = { button in
+                if previewingScreensaver { previewingScreensaver = false; return }
                 if !path.isEmpty { if button == 8 { path.removeLast() }; return }
                 if button == 8 || button == 3 { store.persist(); dismiss(); return }
                 if button == 0 { path.append(SettingsPage.allCases[selected]); return }
                 let delta = [4: -columns, 5: columns, 6: -1, 7: 1][button] ?? 0
                 selected = min(SettingsPage.allCases.count - 1, max(0, selected + delta))
             }
+        }
+        .fullScreenCover(isPresented: $previewingScreensaver) {
+            ScreensaverView { previewingScreensaver = false }
         }
         .alert("Light Retro", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) { Button("OK") { store.error = nil } } message: { Text(store.error ?? "") }
     }
@@ -69,16 +74,57 @@ struct SettingsView: View {
         case .folders: FolderSetupView()
         case .browsing:
             Form {
-                Section("Game tiles") { Toggle("Compact tiles", isOn: profileBinding(\.compactTiles, default: true)) }
-                Section("Visible systems") {
-                    ForEach(GameSystem.playable) { system in
-                        Toggle(system.title, isOn: Binding(get: { !(store.profile.hiddenSystems ?? []).contains(system) }, set: { visible in
-                            store.updateProfile { profile in var hidden = profile.hiddenSystems ?? []; if visible { hidden.remove(system) } else { hidden.insert(system) }; profile.hiddenSystems = hidden }
-                        }))
-                    }
+                Section("Game tiles") {
+                    Toggle("Compact tiles", isOn: profileBinding(\.compactTiles, default: true))
+                    Toggle("Show categories column", isOn: profileBinding(\.showCategoryColumn, default: true))
+                    Text("Turn the second column off for wider game tiles. Search remains available.").font(.footnote)
                 }
-                Section { Text("Hiding a system keeps its games and saves. SCUMM will be added later.").font(.footnote) }
+                Section {
+                    ForEach(Array(store.profile.orderedSystems.enumerated()), id: \.element) { index, system in
+                        HStack(spacing: 8) {
+                            Toggle(system.title, isOn: Binding(
+                                get: { !(store.profile.hiddenSystems ?? []).contains(system) },
+                                set: { visible in
+                                    store.updateProfile { profile in
+                                        var hidden = profile.hiddenSystems ?? []
+                                        if visible { hidden.remove(system) } else { hidden.insert(system) }
+                                        profile.hiddenSystems = hidden
+                                    }
+                                }
+                            ))
+                            Button {
+                                store.updateProfile { $0.moveSystem(system, offset: -1) }
+                            } label: {
+                                Image(systemName: "arrow.up.circle.fill")
+                            }
+                            .disabled(index == 0)
+                            .accessibilityLabel("Move \(system.title) up")
+                            .accessibilityIdentifier("move-system-up-\(system.rawValue)")
+                            Button {
+                                store.updateProfile { $0.moveSystem(system, offset: 1) }
+                            } label: {
+                                Image(systemName: "arrow.down.circle.fill")
+                            }
+                            .disabled(index == store.profile.orderedSystems.count - 1)
+                            .accessibilityLabel("Move \(system.title) down")
+                            .accessibilityIdentifier("move-system-down-\(system.rawValue)")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    .onMove { offsets, destination in
+                        store.updateProfile { profile in
+                            var systems = profile.orderedSystems
+                            systems.move(fromOffsets: offsets, toOffset: destination)
+                            profile.systemOrder = systems.map(\.rawValue)
+                        }
+                    }
+                } header: {
+                    Text("System order & visibility")
+                } footer: {
+                    Text("Use the arrows or drag handles to change the system order for this player. Hidden systems keep their games and saves.")
+                }
             }
+            .environment(\.editMode, .constant(.active))
         case .artwork:
             Form {
                 Section {
@@ -115,6 +161,16 @@ struct SettingsView: View {
             Form {
                 Picker("Start after", selection: profileBinding(\.screensaverMinutes, default: 0)) {
                     Text("Off").tag(0); Text("2 minutes").tag(2); Text("5 minutes").tag(5); Text("10 minutes").tag(10)
+                }
+                Section("Animated preview") {
+                    ScreensaverView(onWake: {}, isPreview: true)
+                        .frame(height: 175)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .allowsHitTesting(false)
+                        .accessibilityIdentifier("screensaver-inline-preview")
+                    Button("Preview screensaver") { previewingScreensaver = true }
+                        .accessibilityIdentifier("screensaver-preview")
+                    Text("The Light Retro logo moves while the exit prompt stays centred at the bottom.").font(.footnote)
                 }
                 Text("Shows the Light Retro logo and clock while the library is idle. Tap or press a controller button to return. Your iPhone’s Auto-Lock setting still applies.").font(.footnote)
             }
@@ -162,36 +218,6 @@ struct ControlOptions: View {
     }
 }
 
-private struct AppearanceView: View {
-    @EnvironmentObject private var store: LibraryStore
-    var body: some View {
-        Form {
-            Section("Brand colour") {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 9) {
-                    ForEach(RetroPalette.colours, id: \.1) { name, hex in
-                        Button { store.updateProfile { $0.colourHex = hex } } label: {
-                            var sample = store.profile
-                            let _ = sample.colourHex = hex
-                            Rectangle().fill(RetroPalette(profile: sample).tone()).frame(height: 34)
-                                .overlay(Rectangle().stroke(store.profile.colourHex == hex ? .white : .clear, lineWidth: 3))
-                        }.buttonStyle(.plain).accessibilityLabel(name)
-                    }
-                }
-                HStack { Text("Strength"); Slider(value: binding(\.colourStrength), in: 0...1) }
-                HStack { Text("Brightness"); Slider(value: binding(\.brightness), in: 0.3...1) }
-                Toggle("Dark text", isOn: Binding(get: { store.profile.darkText ?? false }, set: { value in store.updateProfile { $0.darkText = value } }))
-                Text("Preview").font(.headline).frame(maxWidth: .infinity, minHeight: 75).foregroundStyle(RetroPalette(profile: store.profile).text).background(RetroPalette(profile: store.profile).background)
-            }
-            Section("Layout") {
-                Toggle("Left-handed navigation", isOn: Binding(get: { store.profile.leftHanded }, set: { value in store.updateProfile { $0.leftHanded = value } }))
-                Toggle("Compact game tiles", isOn: Binding(get: { store.profile.compactTiles ?? true }, set: { value in store.updateProfile { $0.compactTiles = value } }))
-                Text("Landscape uses the Android-style system, category and game columns. Portrait keeps the same collection with scrolling menus.").font(.footnote)
-            }
-        }
-    }
-    private func binding(_ key: WritableKeyPath<PlayerProfile, Double?>) -> Binding<Double> { Binding(get: { store.profile[keyPath: key] ?? 1 }, set: { value in store.updateProfile { $0[keyPath: key] = value } }) }
-}
-
 private struct BIOSView: View {
     @EnvironmentObject private var store: LibraryStore
     @State private var picker = false
@@ -205,31 +231,54 @@ private struct BIOSView: View {
 }
 struct ProfilesView: View {
     @EnvironmentObject private var store: LibraryStore
-    @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var rename = ""
+
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Who's playing?") {
-                    ForEach(store.data.profiles) { p in
-                        Button { store.data.currentProfile = p.id; store.persist(); rename = p.name } label: {
-                            HStack { Label(p.name, systemImage: "person.crop.circle"); Spacer(); if p.id == store.profile.id { Image(systemName: "checkmark.circle.fill") } }
+        Form {
+            Section("Who's playing?") {
+                ForEach(store.data.profiles) { player in
+                    Button {
+                        store.selectProfile(player.id)
+                        rename = store.profile.name
+                    } label: {
+                        HStack {
+                            Label(player.name, systemImage: "person.crop.circle")
+                            Spacer()
+                            if player.id == store.profile.id {
+                                Image(systemName: "checkmark.circle.fill")
+                            }
                         }
+                        .contentShape(Rectangle())
                     }
+                    .accessibilityIdentifier("profile-\(player.id)")
                 }
-                Section("New player") {
-                    TextField("Name", text: $name)
-                    Button("Add player") { store.addProfile(name); name = ""; rename = store.profile.name }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            Section("New player") {
+                TextField("Name", text: $name).accessibilityIdentifier("profile-new-name")
+                Button("Add player") {
+                    store.addProfile(name)
+                    name = ""
+                    rename = store.profile.name
                 }
-                Section("Rename current player") {
-                    TextField("Name", text: $rename)
-                    Button("Save name") { let value = rename.trimmingCharacters(in: .whitespacesAndNewlines); if !value.isEmpty { store.updateProfile { $0.name = String(value.prefix(40)) } } }
+                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .accessibilityIdentifier("profile-add")
+            }
+            Section("Rename current player") {
+                TextField("Name", text: $rename).accessibilityIdentifier("profile-rename")
+                Button("Save name") {
+                    let value = rename.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !value.isEmpty { store.updateProfile { $0.name = String(value.prefix(40)) } }
                 }
-                Section { Text("Players share the game library. Favourites, recently played games, colours, handedness and saves are separate.").font(.footnote) }
-            }.navigationTitle("Players").onAppear { rename = store.profile.name }
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+                .disabled(rename.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            Section {
+                Text("Players share the library. Favourites, recently played, colours, system order, column visibility and game saves are separate.")
+                    .font(.footnote)
+            }
         }
+        .onAppear { rename = store.profile.name }
+        .onChange(of: store.data.currentProfile) { _ in rename = store.profile.name }
     }
 }
 

@@ -19,9 +19,9 @@ Native SwiftUI + libretro port (iOS 17 or newer) of Light Retro Android 2.10. Ve
 
 ## Current limits
 
-SCUMM is deferred. MAME uses the same pinned 0.289 source as Android, with its portable C backend. N64 uses Mupen64Plus-Next, cached CPU interpretation and GLideN64 through an OpenGL ES 3 framebuffer. Both cores have passed native compilation and signed TestFlight upload; game compatibility still needs device tests. No MAME-to-FBNeo fallback is made: the ROM sets differ. N64 and demanding arcade games may run slowly without JIT.
+SCUMM is deferred. MAME uses the same pinned 0.289 source as Android, with its portable C backend. N64 uses Mupen64Plus-Next, cached CPU interpretation and GLideN64 through an OpenGL ES 3 framebuffer. Both cores have passed native compilation and signed TestFlight upload; game compatibility still needs device tests. Automatic arcade folders use MAME when a matching CHD is found in the game or parent set subfolder. Start the ZIP. The pause menu’s Check game files action lists the expected discs, checks v4/v5 disc header IDs and checks the BIOS in the three Street Fighter III parent ZIPs. Explicit FBNeo entries with a MAME disc definition also offer Play with MAME. N64 and demanding arcade games may run slowly without JIT.
 
-Android app launching and APK updates do not apply to iOS; updates use TestFlight. Settings tiles and the library accept controllers; detail forms and Files pickers use touch. Touch controls follow the console pad, including the Mega Drive three- and six-button layouts and the N64 analogue stick, Z and C buttons. MAME and FBNeo offer automatic game layouts and a 2–6 button switch in the player and pause menu. Each profile remembers the choice by arcade set name, including games in shared folders. Linked cloud/NAS folders require the provider to make the files available locally; this is not a UPnP client. Emulator performance, audio routing, drive permissions and game compatibility need physical iPhone testing.
+Android app launching and APK updates do not apply to iOS; updates use TestFlight. Settings tiles and the library accept controllers; detail forms and Files pickers use touch. Every system uses the N64-style touch joystick and the same direct multitouch input for face, shoulder and utility buttons. Digital games receive eight-way directions. Console face layouts include the Mega Drive three- and six-button layouts and the N64 analogue stick, Z and C buttons. MAME and FBNeo offer automatic game layouts and a 2–6 button switch in the player and pause menu. Each profile remembers the choice by arcade set name, including games in shared folders. Linked cloud/NAS folders require the provider to make the files available locally; this is not a UPnP client. Emulator performance, audio routing, drive permissions and game compatibility need physical iPhone testing.
 
 No commercial ROMs, BIOS images or personal credentials are included. The application makes no analytics, account or game-upload requests. Optional cover requests send system/title candidates to `thumbnails.libretro.com`; no ROM bytes are uploaded. Disable downloads in Artwork & descriptions for local/cached artwork only. Uninstalling the app removes local games and saves; back up **Files → On My iPhone → Light Retro → Saves**.
 
@@ -29,9 +29,12 @@ No commercial ROMs, BIOS images or personal credentials are included. The applic
 
 Every push runs library/scanner/metadata/migration, archive safety and audio/video regression tests, compiles the iPhone application, runs native simulator UI checks in portrait and landscape, builds the seven emulator cores from pinned source, then verifies a complete unsigned bundle. Nothing is uploaded to Apple automatically.
 
-For a local Mac build with Xcode 26 and XcodeGen:
+The application, bundle verification and TestFlight archive use Xcode 27.2 and the iOS 27.2 SDK on an Apple Silicon runner. UI tests run on the iOS 27.2 simulator. The minimum supported iOS version remains 17.0. Emulator frameworks retain their tested Xcode 26 toolchain and cache; the final app bundle must report an iOS 27 or newer SDK before upload.
+
+For a local Apple Silicon Mac build, install Xcode 26, Xcode 27.2 and XcodeGen. Build the engines with Xcode 26, then select Xcode 27.2 for the application:
 
 ```sh
+bash ci/select_xcode.sh
 python3 ci/build_core.py fceumm
 python3 ci/build_core.py snes9x
 python3 ci/build_core.py genesis_plus_gx
@@ -39,8 +42,9 @@ python3 ci/build_core.py mednafen_pce_fast
 python3 ci/build_core.py fbneo
 python3 ci/build_core.py mamearcade
 python3 ci/build_core.py mupen64plus_next
+export DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer
 INCLUDE_CORES=1 BUNDLE_ID=com.lightretro.app BUILD_NUMBER=1 python3 ci/generate_project.py
-open LightRetro.xcodeproj
+open -a /Applications/Xcode_27.2.app LightRetro.xcodeproj
 ```
 
 Select your Apple team in Xcode before installing on a device. `INCLUDE_CORES=1` is mandatory for a playable build. Omitting it is only for compiling frontend changes; it does not produce a playable app. Core frameworks are device-only arm64, not simulator binaries.

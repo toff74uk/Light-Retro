@@ -15,9 +15,18 @@ def validate_build_version(info, bundle):
         )
 
 
+def validate_app_sdk(info):
+    sdk = info.get('DTSDKName', '')
+    match = re.fullmatch(r'iphoneos([0-9]+)(?:\.[0-9]+)*', sdk)
+    if not match or int(match[1]) < 27:
+        raise ValueError(f'The app must be built with the iOS 27 SDK or later; found {sdk!r}.')
+
+
 def verify_bundle(app, signed=False):
     root = pathlib.Path(__file__).resolve().parents[1]
-    validate_build_version(plistlib.loads((app / 'Info.plist').read_bytes()), app.name)
+    app_info = plistlib.loads((app / 'Info.plist').read_bytes())
+    validate_build_version(app_info, app.name)
+    validate_app_sdk(app_info)
     for core in json.loads((root / 'ci/cores.json').read_text()):
         name = core['name']
         fw = app / 'Frameworks' / f'{name}.framework'
@@ -32,6 +41,8 @@ def verify_bundle(app, signed=False):
     catalogue = app / 'Catalogue'
     assert len(json.loads((catalogue / 'mame-titles.json').read_text())) == 31122, 'Missing Android MAME names'
     assert len(json.loads((catalogue / 'fbneo-titles.json').read_text())) == 8436, 'Missing Android FBNeo names'
+    discs = json.loads((catalogue / 'arcade-discs.json').read_text())
+    assert 'cap-33s-2' in discs['sfiii3']['discs'] and 'sfrush' in discs['sfrush']['discs'], 'Missing MAME CHD data'
     boards = json.loads((catalogue / 'fbneo-boards.json').read_text())
     assert len(set().union(*boards.values())) == 1839, 'Missing Android FBNeo routing data'
     assert len(json.loads((catalogue / 'collections.json').read_text())) == 11, 'Missing arcade, SNES or Mega Drive curated collections'
@@ -39,7 +50,7 @@ def verify_bundle(app, signed=False):
     assert (app / 'Licenses').is_dir(), 'Missing licences'
     if signed:
         subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
-    print('Verified bundle versions, every bundled iPhone engine, privacy manifest and licence folder.')
+    print(f"Verified app SDK {app_info['DTSDKName']}, bundle versions, every bundled iPhone engine, privacy manifest and licence folder.")
 
 
 if __name__ == '__main__':
