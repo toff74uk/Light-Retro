@@ -2,13 +2,15 @@ import SwiftUI
 
 struct ScreensaverView: View {
     let onWake: () -> Void
+    var isPreview = false
     @State private var startedAt = ProcessInfo.processInfo.systemUptime
 
     var body: some View {
         VStack(spacing: 0) {
             GeometryReader { geometry in
                 let size = geometry.size
-                let width = min(240, size.width * 0.72, size.height * 1.1)
+                let width = min(isPreview ? CGFloat(130) : CGFloat(240),
+                                size.width * 0.72, size.height * (isPreview ? 0.75 : 1.1))
                 let height = width * 0.70
                 TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { _ in
                     let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
@@ -45,7 +47,7 @@ struct ScreensaverView: View {
         }
         .foregroundStyle(.white)
         .background(Color.black.ignoresSafeArea())
-        .statusBarHidden()
+        .statusBarHidden(!isPreview)
     }
 
     // Reflect at each edge at the same constant speeds as the Android screensaver.

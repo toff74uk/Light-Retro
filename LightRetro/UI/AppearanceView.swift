@@ -37,6 +37,9 @@ struct AppearanceView: View {
                         Toggle("Compact game tiles", isOn: Binding(get: { store.profile.compactTiles ?? true }, set: { value in
                             store.updateProfile { $0.compactTiles = value }
                         }))
+                        Toggle("Show categories column", isOn: Binding(get: { store.profile.showCategoryColumn ?? true }, set: { value in
+                            store.updateProfile { $0.showCategoryColumn = value }
+                        }))
                     }
                     .padding(narrow ? 10 : 16)
                 }
@@ -118,7 +121,10 @@ private struct LibraryAppearancePreview: View {
             Image("Brand").resizable().scaledToFit().frame(height: narrow ? 26 : 36)
             Text("All games").font(.subheadline.bold())
             HStack(alignment: .top, spacing: 5) {
-                if !profile.leftHanded { navigation }
+                if !profile.leftHanded {
+                    navigation
+                    if profile.showCategoryColumn ?? true { previewCategories }
+                }
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: columns), spacing: 4) {
                     ForEach(Array(tiles.enumerated()), id: \.offset) { index, tile in
                         VStack(spacing: 2) {
@@ -133,7 +139,10 @@ private struct LibraryAppearancePreview: View {
                         .overlay { if index == 0 { Rectangle().strokeBorder(palette.text, lineWidth: 1) } }
                     }
                 }
-                if profile.leftHanded { navigation }
+                if profile.leftHanded {
+                    if profile.showCategoryColumn ?? true { previewCategories }
+                    navigation
+                }
             }
         }
         .padding(narrow ? 6 : 10)
@@ -143,7 +152,7 @@ private struct LibraryAppearancePreview: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Library preview")
-        .accessibilityValue("\(RetroPalette.colours.first { $0.1 == palette.baseHex }?.0 ?? profile.theme), \(profile.leftHanded ? "navigation right" : "navigation left"), \(compact ? "compact tiles" : "large tiles")")
+        .accessibilityValue("\(RetroPalette.colours.first { $0.1 == palette.baseHex }?.0 ?? profile.theme), \(profile.leftHanded ? "navigation right" : "navigation left"), \(compact ? "compact tiles" : "large tiles"), \((profile.showCategoryColumn ?? true) ? "categories visible" : "categories hidden")")
         .accessibilityIdentifier("appearance-preview")
     }
 
@@ -162,4 +171,18 @@ private struct LibraryAppearancePreview: View {
         }
         .frame(width: narrow ? 23 : 77)
     }
+    private var previewCategories: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(["All ROMs", "Sonic Games", "Sega Games", "Favourites"], id: \.self) { title in
+                Text(narrow ? String(title.prefix(3)) : title)
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .padding(4)
+                    .frame(maxWidth: .infinity, minHeight: 23, alignment: .leading)
+                    .background(title == "All ROMs" ? palette.selected : palette.tile)
+            }
+        }
+        .frame(width: narrow ? 26 : 76)
+    }
+
 }
