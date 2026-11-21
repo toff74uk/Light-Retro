@@ -74,6 +74,9 @@ struct PlayerView: View {
     @Environment(\.scenePhase) private var phase
     @StateObject private var session = GameSession()
     @State private var showControls = true
+    @State private var controlsVisible = true
+    @State private var lastControlActivity = Date()
+    private let idleClock = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
     @State private var confirmReset = false
     @State private var confirmDiscard = false
     private var automaticButtons: Int {
@@ -104,37 +107,73 @@ struct PlayerView: View {
             .accessibilityIdentifier("arcade-layout")
     }
     private var touchPad: some View {
-        TouchControls(system: game.system, count: buttons, fbneoInputs: session.fbneoInputs)
+        TouchControls(system: game.system, count: buttons, fbneoInputs: session.fbneoInputs, onInteraction: { revealControls() })
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            let portrait = geometry.size.height > geometry.size.width
+        GeometryReader { _ in
             ZStack {
                 Color.black.ignoresSafeArea()
-                VStack(spacing: 0) {
-                    HStack {
-                        Button { input.clear(); session.pause() } label: { Image(systemName: "pause.circle.fill").font(.title) }.accessibilityLabel("Pause game")
-                        Spacer()
-                        Text(game.displayTitle).font(.caption).lineLimit(1)
-                        Spacer()
-                        if game.system.isArcade { layoutMenu }
-                        Button { showControls.toggle(); input.clear() } label: { Image(systemName: "gamecontroller").font(.title2) }.accessibilityLabel("Show or hide touch controls")
-                    }.foregroundStyle(.white).padding(.horizontal, 18).padding(.vertical, 6)
-                    ZStack {
-                        GameScreen(engine: session.engine)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        if showControls && !portrait && !session.paused { touchPad.padding(.horizontal, 14).padding(.bottom, 12) }
+                // Gameplay uses the whole screen. The HUD and on-screen
+                // controls are overlays, so portrait has no controls strip.
+                GameScreen(engine: session.engine)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea()
+                    .accessibilityHidden(session.paused)
+
+                if !session.paused {
+                    if controlsVisible {
+                        if showControls {
+                            touchPad.padding(.horizontal, 12).padding(.vertical, 10)
+                                .accessibilityIdentifier("touch-controls-overlay")
+                        }
+                        VStack {
+                            HStack(spacing: 14) {
+                                Button { input.clear(); session.pause() } label: {
+                                    Image(systemName: "pause.circle.fill").font(.title)
+                                }.accessibilityLabel("Pause game")
+                                Spacer()
+                                if game.system.isArcade { layoutMenu }
+                                Button { showControls.toggle(); input.clear(); revealControls() } label: {
+                                    Image(systemName: "gamecontroller").font(.title2)
+                                }.accessibilityLabel("Show or hide touch controls")
+                                Button { input.clear(); session.pause() } label: {
+                                    Image(systemName: "gearshape.fill").font(.title2)
+                                }.accessibilityLabel("Game settings")
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16).padding(.vertical, 8)
+                            .background(.black.opacity(0.25))
+                            Spacer()
+                        }
+                        .transition(.opacity)
+                    } else {
+                        // First tap simply reveals the controls without pausing.
+                        Color.clear.contentShape(Rectangle())
+                            .onTapGesture { revealControls() }
+                            .accessibilityLabel("Show on-screen controls")
                     }
-                    if showControls && portrait && !session.paused { touchPad.frame(height: 220).padding(.horizontal, 20) }
-                }.allowsHitTesting(!session.paused).accessibilityHidden(session.paused)
+                }
+
                 if session.paused {
                     pauseMenu.padding(12).frame(maxWidth: 450, maxHeight: 480)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20)).padding(8)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+                        .padding(8)
                 }
             }
         }.statusBarHidden()
-            .onAppear { showControls = input.names.isEmpty; session.open(game, store: store, input: input) }
+            .onAppear {
+                showControls = input.names.isEmpty
+                revealControls()
+                session.open(game, store: store, input: input)
+            }
+            .onChange(of: session.paused) { _, paused in if !paused { revealControls() } }
+            .onReceive(idleClock) { now in
+                guard !session.paused, controlsVisible,
+                      now.timeIntervalSince(lastControlActivity) >= 5,
+                      input.pressed.isEmpty, input.pressedC.isEmpty else { return }
+                withAnimation(.easeOut(duration: 0.25)) { controlsVisible = false }
+            }
             .onDisappear { if session.loaded { session.pause(); session.automaticSave() }; session.stop(input: input) }
             .onChange(of: phase) { value in
                 if value == .inactive {
@@ -150,6 +189,13 @@ struct PlayerView: View {
                 Button("Cancel", role: .cancel) {}
             } message: { Text("Your previous automatic state and in-game battery saves are kept.") }
     }
+    private func revealControls() {
+        lastControlActivity = Date()
+        if !controlsVisible {
+            withAnimation(.easeIn(duration: 0.2)) { controlsVisible = true }
+        }
+    }
+
     private var pauseMenu: some View {
         VStack(spacing: 8) {
             Text(game.displayTitle).font(.headline).lineLimit(1)
