@@ -89,6 +89,17 @@ final class GameCatalogue {
         return canonical
     }
 
+    static func repairLegacyArcadeTitle(_ source: Game) -> Game {
+        // Previously the catalogue title was passed through NSString.lastPathComponent.
+        // Repair only that exact legacy result, leaving custom titles and imported metadata alone.
+        var game = source
+        guard game.system.isArcade, let canonical = game.catalogueTitle,
+              canonical.contains("/"),
+              game.title == LibraryRules.displayName(canonical + ".rom") else { return game }
+        game.title = canonical
+        return game
+    }
+
     func identify(_ source: Game) -> Game {
         var game = source
         let key = game.romStem.lowercased()
