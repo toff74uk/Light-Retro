@@ -7,6 +7,7 @@
 #include <memory>
 #include "libretro.h"
 #include "FrameAudio.hpp"
+#include "VideoAspect.hpp"
 #include "AnalogInput.hpp"
 #include "JoypadButtons.hpp"
 #import "RetroVideoView.h"
@@ -72,6 +73,7 @@ static __weak RetroEngine* frontend=nil;
 - (BOOL)configureHardware:(retro_hw_render_callback*)callback;
 - (void)applyAVInfo:(const retro_system_av_info*)av;
 - (void)applyGeometry:(const retro_game_geometry*)geometry;
+- (void)updateDisplayGeometry;
 - (uintptr_t)framebuffer;
 - (void)presentWidth:(unsigned)width height:(unsigned)height;
 - (BOOL)prepareStateOperation;
@@ -243,7 +245,13 @@ static NSString* optionString(const std::string& text) {
 - (void)applyGeometry:(const retro_game_geometry*)geometry {
     if(!_core || !geometry->base_width || !geometry->base_height) return;
     _core->aspect=geometry->aspect_ratio>0?geometry->aspect_ratio:double(geometry->base_width)/geometry->base_height;
-    [_videoView setAspect:_core->aspect rotation:_core->rotation];
+    [self updateDisplayGeometry];
+}
+- (void)updateDisplayGeometry {
+    if (!_core) return;
+    const double framebufferAspect=LightRetroVideo::aspectBeforeRotation(
+        _core->name, _core->aspect, _core->rotation);
+    [_videoView setAspect:framebufferAspect rotation:_core->rotation];
 }
 - (void)applyAVInfo:(const retro_system_av_info*)av {
     if(!_core) return;
@@ -254,7 +262,7 @@ static NSString* optionString(const std::string& text) {
 }
 - (void)presentWidth:(unsigned)width height:(unsigned)height {
     if(!_core || !_core->hardwareReady) return;
-    [_videoView setAspect:_core->aspect rotation:_core->rotation];
+    [self updateDisplayGeometry];
     [_videoView presentWidth:width height:height];
 }
 - (double)aspectRatio { return _core?_core->aspect:4.0/3; }
@@ -358,7 +366,7 @@ static NSString* optionString(const std::string& text) {
     CGDataProviderRef provider=CGDataProviderCreateWithCFData((__bridge CFDataRef)bytes);
     CGColorSpaceRef space=CGColorSpaceCreateDeviceRGB();
     CGImageRef frame=CGImageCreate(width,height,8,32,width*4,space,kCGBitmapByteOrderDefault|kCGImageAlphaLast,provider,nullptr,false,kCGRenderingIntentDefault);
-    [_videoView setAspect:_core->aspect rotation:_core->rotation];
+    [self updateDisplayGeometry];
     [_videoView showImage:[UIImage imageWithCGImage:frame]];
     CGImageRelease(frame); CGColorSpaceRelease(space); CGDataProviderRelease(provider);
 }

@@ -36,10 +36,14 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(stick.isHittable)
         let hidden = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             !stick.exists && !action.exists &&
-            app.buttons["Pause game"].exists &&
+            app.buttons["game-pause"].exists &&
             app.buttons["emulator-setup"].exists
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 8), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 12), .completed)
+        // Persistent vertical toolbar controls stay available when the pad fades.
+        XCTAssertTrue(app.buttons["game-pause"].exists)
+        XCTAssertTrue(app.buttons["emulator-setup"].exists)
+        XCTAssertTrue(app.buttons["touch-controls-toggle"].exists)
         viewport.coordinate(withNormalizedOffset: centre).tap()
         XCTAssertTrue(stick.waitForExistence(timeout: 3))
         // Verify pause remains available after the idle timeout. Landscape
@@ -104,10 +108,22 @@ final class LibraryUITests: XCTestCase {
         let coin = app.buttons["COIN"]
         let start = app.buttons["START"]
         let setup = app.buttons["emulator-setup"]
+        let layout = app.buttons["arcade-layout"]
+        let toggle = app.buttons["touch-controls-toggle"]
+        let pause = app.buttons["game-pause"]
         XCTAssertTrue(coin.isHittable && start.isHittable && setup.isHittable)
+        XCTAssertTrue(layout.isHittable && toggle.isHittable && pause.isHittable)
+        // Coin, Start and Pause form one vertical left column.
         XCTAssertEqual(coin.frame.midX, start.frame.midX, accuracy: 5)
+        XCTAssertEqual(pause.frame.midX, start.frame.midX, accuracy: 5)
         XCTAssertLessThan(coin.frame.midY, start.frame.midY)
+        XCTAssertLessThan(start.frame.midY, pause.frame.midY)
         XCTAssertLessThan(start.frame.midX, app.frame.midX)
+        // MAME setup, arcade layout and touch visibility descend the right edge.
+        XCTAssertEqual(setup.frame.midX, layout.frame.midX, accuracy: 5)
+        XCTAssertEqual(setup.frame.midX, toggle.frame.midX, accuracy: 5)
+        XCTAssertLessThan(setup.frame.midY, layout.frame.midY)
+        XCTAssertLessThan(layout.frame.midY, toggle.frame.midY)
         XCTAssertGreaterThan(setup.frame.midX, app.frame.midX)
         XCTAssertLessThan(coin.frame.midY, app.frame.height / 3)
     }

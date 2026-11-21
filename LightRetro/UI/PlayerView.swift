@@ -177,55 +177,77 @@ struct PlayerView: View {
                     }
                     .ignoresSafeArea()
                 if !session.paused {
-                    // Keep Pause and real emulator setup reachable even after
-                    // the five-second idle fade hides the virtual game controls.
+                    // Vertical side stacks leave the centre of the screen unobstructed
+                    // for vertical shooters, in both iPhone orientations.
+                    // Pause and emulator setup remain reachable after touch controls fade.
                     VStack(spacing: 0) {
-                        HStack(spacing: 2) {
-                            if overlayVisible && showControls { systemKeys }
-                            Button { input.clear(); session.pause() } label: {
-                                Image(systemName: "pause.circle.fill")
-                                    .font(.title).frame(width: 44, height: 44)
+                        HStack(alignment: .top, spacing: 3) {
+                            VStack(spacing: 5) {
+                                if overlayVisible && showControls { systemKeys }
+                                Button { input.clear(); session.pause() } label: {
+                                    Image(systemName: "pause.circle.fill")
+                                        .font(.title).frame(width: 44, height: 44)
+                                }
+                                .accessibilityLabel("Pause game")
+                                .accessibilityIdentifier("game-pause")
                             }
-                            .accessibilityLabel("Pause game")
+                            .frame(width: 52, alignment: .topLeading)
+                            .accessibilityIdentifier("game-toolbar-left")
+
                             Spacer(minLength: 0)
                             if overlayVisible {
-                                ViewThatFits(in: .horizontal) {
-                                    Text(game.displayTitle).font(.caption).lineLimit(1)
-                                    Color.clear.frame(width: 0, height: 1)
+                                Text(game.displayTitle)
+                                    .font(.caption)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                    .padding(.top, 8)
+                                    .frame(maxWidth: portrait ? 145 : 270)
+                            }
+                            Spacer(minLength: 0)
+
+                            VStack(spacing: 6) {
+                                Button {
+                                    input.clear()
+                                    revealOverlay()
+                                    session.openSetup(for: activeSystem)
+                                } label: {
+                                    Image(systemName: "gearshape.fill")
+                                        .font(.title2).frame(width: 44, height: 44)
                                 }
-                                Spacer(minLength: 0)
+                                .accessibilityLabel(activeSystem == .arcade ? "MAME setup" : "Emulator setup")
+                                .accessibilityIdentifier("emulator-setup")
+
+                                // Always keep the compact toolbar controls within reach.
+                                // Only the virtual game pad, Coin/Start and title fade.
+                                // This also lets people restore the pad without finding a
+                                // hidden toggle in a running game.
                                 if activeSystem.isArcade {
-                                    if portrait { layoutMenu.labelStyle(.iconOnly).frame(minWidth: 44) }
-                                    else { layoutMenu }
+                                    layoutMenu
+                                        .labelStyle(.iconOnly)
+                                        .frame(width: 44, height: 44)
                                 }
+                                Button {
+                                    revealOverlay()
+                                    showControls.toggle()
+                                    input.clear()
+                                    session.engine.clearButtons()
+                                } label: {
+                                    Image(systemName: "gamecontroller")
+                                        .font(.title2).frame(width: 44, height: 44)
+                                }
+                                .accessibilityLabel("Show or hide touch controls")
+                                .accessibilityIdentifier("touch-controls-toggle")
                             }
-                            Button {
-                                revealOverlay()
-                                showControls.toggle()
-                                input.clear()
-                                session.engine.clearButtons()
-                            } label: {
-                                Image(systemName: "gamecontroller")
-                                    .font(.title2).frame(width: 44, height: 44)
-                            }
-                            .accessibilityLabel("Show or hide touch controls")
-                            Button {
-                                input.clear()
-                                revealOverlay()
-                                session.openSetup(for: activeSystem)
-                            } label: {
-                                Image(systemName: "gearshape.fill")
-                                    .font(.title2).frame(width: 44, height: 44)
-                            }
-                            .accessibilityLabel(activeSystem == .arcade ? "MAME setup" : "Emulator setup")
-                            .accessibilityIdentifier("emulator-setup")
+                            .frame(width: 52, alignment: .topTrailing)
+                            .accessibilityIdentifier("game-toolbar-right")
                         }
                         .foregroundStyle(.white.opacity(overlayVisible ? 0.85 : 0.62))
                         .padding(.horizontal, portrait ? 6 : 12)
+
                         Spacer(minLength: 0)
                         if showControls && overlayVisible {
-                            // Controls overlay the full-size game in both orientations.
-                            // Console and game action-button clusters remain unchanged.
+                            // The game occupies its full viewport; joystick and
+                            // console-specific button clusters overlay its lower edge.
                             touchPad.frame(height: min(220, max(0, geometry.size.height - 100)))
                                 .padding(.horizontal, portrait ? 20 : 14)
                                 .padding(.bottom, portrait ? 0 : 12)
