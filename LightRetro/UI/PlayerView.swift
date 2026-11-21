@@ -352,10 +352,10 @@ private struct TouchLayout: View {
         switch button.input {
         case .digital(let id):
             down = input.pressed.contains(id)
-            change = { onInteraction(); input.setTouch(id, down: $0) }
+            change = { down in if down { onInteraction() }; input.setTouch(id, down: down) }
         case .cDirection(let id):
             down = input.pressedC.contains(id)
-            change = { onInteraction(); input.setTouchC(id, down: $0) }
+            change = { down in if down { onInteraction() }; input.setTouchC(id, down: down) }
         }
         let tint = colour(button)
         return Text(button.label)
@@ -421,7 +421,7 @@ private struct TouchLayout: View {
             .foregroundStyle(.white).frame(width: width, height: min(step, 36))
             .background(.black.opacity(0.52), in: Capsule())
             .background(input.pressed.contains(id) ? .orange : .gray.opacity(0.8), in: Capsule())
-            .overlay { TouchButtonSurface { onInteraction(); input.setTouch(id, down: $0) } }
+            .overlay { TouchButtonSurface { down in if down { onInteraction() }; input.setTouch(id, down: down) } }
             .accessibilityLabel(label).accessibilityAddTraits(.isButton)
             .onDisappear { input.setTouch(id, down: false) }
     }
