@@ -56,3 +56,55 @@ struct RetroTile: View {
         }.buttonStyle(.plain).accessibilityIdentifier("settings-" + title)
     }
 }
+
+
+/// Shared animated screensaver used by the actual idle view and its Settings preview.
+/// Movement is time-based so the preview reflects the real screensaver.
+struct RetroScreensaver: View {
+    var preview = false
+    var onExit: (() -> Void)? = nil
+
+    private static func bounce(_ phase: Double) -> CGFloat {
+        let fraction = phase - floor(phase)
+        return CGFloat(fraction < 0.5 ? fraction * 2 : (1 - fraction) * 2)
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { context in
+                let width = geometry.size.width
+                let height = geometry.size.height
+                let logoWidth = min(preview ? CGFloat(126) : CGFloat(240), width * 0.43)
+                let logoHeight = logoWidth * 0.42
+                let horizontalRange = max(0, width - logoWidth - 24)
+                let verticalRange = max(0, height - logoHeight - (preview ? 36 : 72))
+                let time = context.date.timeIntervalSinceReferenceDate
+                let x = 12 + logoWidth / 2 + horizontalRange * Self.bounce(time / 9.5)
+                let y = 12 + logoHeight / 2 + verticalRange * Self.bounce(time / 13.7 + 0.3)
+                ZStack {
+                    Color.black
+                    Image("Brand").resizable().scaledToFit()
+                        .frame(width: logoWidth, height: logoHeight)
+                        .position(x: x, y: y)
+                    Text(context.date, style: .time)
+                        .font(.system(size: preview ? 24 : 48, weight: .light, design: .rounded))
+                        .foregroundStyle(.white)
+                        .position(x: width / 2, y: height * 0.55)
+                    VStack {
+                        Spacer()
+                        Text("Tap or press to exit")
+                            .font(preview ? .caption2 : .caption)
+                            .foregroundStyle(.white.opacity(0.8))
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.bottom, preview ? 8 : 24)
+                    }
+                }
+                .frame(width: width, height: height)
+            }
+        }
+        .background(.black)
+        .contentShape(Rectangle())
+        .onTapGesture { onExit?() }
+        .accessibilityLabel("Animated Light Retro screensaver")
+    }
+}
