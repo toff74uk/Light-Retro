@@ -290,16 +290,14 @@ final class LibraryUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Category"].exists)
         app.buttons["open-settings"].tap()
         app.buttons["settings-Customise browsing"].tap()
-        let categories = app.switches["Show categories column"]
+        let categories = app.buttons["categories-column-toggle"]
         XCTAssertTrue(categories.waitForExistence(timeout: 5))
-        // The switch starts On in a fresh preview profile. Verify it
-        // actually changes without depending on a localized On/Off value.
-        let initialValue = String(describing: categories.value)
+        XCTAssertEqual(categories.label, "Hide categories")
         categories.tap()
-        let changed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            String(describing: categories.value) != initialValue
+        let switched = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            categories.label == "Show categories"
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 6), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [switched], timeout: 6), .completed)
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["save-exit"].tap()
 

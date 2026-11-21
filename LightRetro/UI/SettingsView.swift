@@ -76,7 +76,21 @@ struct SettingsView: View {
             Form {
                 Section("Game tiles") {
                     Toggle("Compact tiles", isOn: profileBinding(\.compactTiles, default: true))
-                    Toggle("Show categories column", isOn: profileBinding(\.showCategoryColumn, default: true))
+                    Button {
+                        store.updateProfile { profile in
+                            profile.showCategoryColumn = !(profile.showCategoryColumn ?? true)
+                        }
+                    } label: {
+                        HStack {
+                            Label("Categories column", systemImage: "rectangle.split.2x1")
+                            Spacer()
+                            Text((store.profile.showCategoryColumn ?? true) ? "Show" : "Hide")
+                                .fontWeight(.semibold)
+                            Image(systemName: (store.profile.showCategoryColumn ?? true) ? "eye" : "eye.slash")
+                        }
+                    }
+                    .accessibilityIdentifier("categories-column-toggle")
+                    .accessibilityLabel((store.profile.showCategoryColumn ?? true) ? "Hide categories" : "Show categories")
                     Text("Turn the second column off for wider game tiles. Search remains available.").font(.footnote)
                 }
                 Section {
