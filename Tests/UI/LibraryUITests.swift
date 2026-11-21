@@ -296,7 +296,10 @@ final class LibraryUITests: XCTestCase {
         // actually changes without depending on a localized On/Off value.
         let initialValue = String(describing: categories.value)
         categories.tap()
-        XCTAssertNotEqual(String(describing: categories.value), initialValue)
+        let changed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            String(describing: categories.value) != initialValue
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 6), .completed)
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["save-exit"].tap()
 

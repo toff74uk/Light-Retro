@@ -111,20 +111,14 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.borderless)
                     }
-                    .onMove { offsets, destination in
-                        store.updateProfile { profile in
-                            var systems = profile.orderedSystems
-                            systems.move(fromOffsets: offsets, toOffset: destination)
-                            profile.systemOrder = systems.map(\.rawValue)
-                        }
-                    }
+
                 } header: {
                     Text("System order & visibility")
                 } footer: {
-                    Text("Use the arrows or drag handles to change the system order for this player. Hidden systems keep their games and saves.")
+                    Text("Use the up/down arrows to change system order. Hidden systems keep their games and saves.")
                 }
             }
-            .environment(\.editMode, .constant(.active))
+
         case .artwork:
             Form {
                 Section {
