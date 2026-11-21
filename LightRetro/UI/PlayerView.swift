@@ -122,36 +122,41 @@ struct PlayerView: View {
                     .accessibilityHidden(session.paused)
 
                 if !session.paused {
-                    if controlsVisible {
-                        if showControls {
-                            touchPad.padding(.horizontal, 12).padding(.vertical, 10)
-                                .accessibilityIdentifier("touch-controls-overlay")
-                        }
-                        VStack {
-                            HStack(spacing: 14) {
-                                Button { input.clear(); session.pause() } label: {
-                                    Image(systemName: "pause.circle.fill").font(.title)
-                                }.accessibilityLabel("Pause game")
-                                Spacer()
-                                if game.system.isArcade { layoutMenu }
-                                Button { showControls.toggle(); input.clear(); revealControls() } label: {
-                                    Image(systemName: "gamecontroller").font(.title2)
-                                }.accessibilityLabel("Show or hide touch controls")
-                                Button { input.clear(); session.pause() } label: {
-                                    Image(systemName: "gearshape.fill").font(.title2)
-                                }.accessibilityLabel("Game settings")
-                            }
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 16).padding(.vertical, 8)
-                            .background(.black.opacity(0.25))
-                            Spacer()
-                        }
-                        .transition(.opacity)
-                    } else {
-                        // First tap simply reveals the controls without pausing.
+                    if !controlsVisible {
+                        // Screen taps wake the virtual pad while the pause and
+                        // settings controls stay available at all times.
                         Color.clear.contentShape(Rectangle())
                             .onTapGesture { revealControls() }
                             .accessibilityLabel("Show on-screen controls")
+                    }
+                    if showControls && controlsVisible {
+                        touchPad
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .accessibilityIdentifier("touch-controls-overlay")
+                    }
+                    VStack {
+                        HStack(spacing: 14) {
+                            Button { input.clear(); session.pause() } label: {
+                                Image(systemName: "pause.circle.fill").font(.title)
+                            }
+                            .accessibilityLabel("Pause game")
+                            Spacer()
+                            if game.system.isArcade { layoutMenu }
+                            Button { showControls.toggle(); input.clear(); revealControls() } label: {
+                                Image(systemName: "gamecontroller").font(.title2)
+                            }
+                            .accessibilityLabel("Show or hide touch controls")
+                            Button { input.clear(); session.pause() } label: {
+                                Image(systemName: "gearshape.fill").font(.title2)
+                            }
+                            .accessibilityLabel("Game settings")
+                            .accessibilityIdentifier("game-settings")
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(.black.opacity(controlsVisible ? 0.25 : 0.12))
+                        Spacer()
                     }
                 }
 
