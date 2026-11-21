@@ -238,24 +238,24 @@ private struct TouchControls: View {
     let system: GameSystem
     let count: Int
     let fbneoInputs: [Int]
+    let onInteraction: () -> Void
     @EnvironmentObject private var store: LibraryStore
+
     var body: some View {
         let face = TouchPad.face(system: system, count: count, fbneoInputs: fbneoInputs)
         GeometryReader { area in
             let width = area.size.width
-            let height = min(220, area.size.height)
-            let pad = min(138, width * 0.32, height * 0.72)
-            let middle = min(62, max(42, width * 0.14))
+            let height = area.size.height
+            let pad = min(148, width * 0.32, max(88, height * 0.34))
             let columns = (face.map(\.column).max() ?? 0) + 1
             let rows = (face.map(\.row).max() ?? 0) + 1
-            let shoulders = system == .snes || system == .n64
-            let step = min(store.profile.largeTouchButtons == true ? 60 : 50,
-                           (width - pad - middle - 10) / columns,
-                           (height - (shoulders ? 48 : 0)) / rows)
-            TouchLayout(system: system, count: count, face: face, step: max(1, step), padWidth: pad,
-                        middle: middle,
-                        response: store.profile.controlResponse ?? .standard)
-                .frame(maxHeight: height).frame(maxHeight: .infinity, alignment: .bottom)
+            let step = min(store.profile.largeTouchButtons == true ? CGFloat(60) : CGFloat(50),
+                           (width - pad - 26) / max(CGFloat(columns), 1),
+                           min(215, height * 0.37) / max(CGFloat(rows), 1))
+            TouchLayout(system: system, count: count, face: face, step: max(1, step),
+                        padWidth: pad, response: store.profile.controlResponse ?? .standard,
+                        onInteraction: onInteraction)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -266,45 +266,58 @@ private struct TouchLayout: View {
     let face: [PadButton]
     let step: CGFloat
     let padWidth: CGFloat
-    let middle: CGFloat
     let response: ControlResponse
+    let onInteraction: () -> Void
     @State private var dpadMode = false
     @EnvironmentObject private var input: ControllerHub
 
     var body: some View {
         VStack(spacing: 4) {
-            if system == .snes || system == .n64 {
-                HStack {
-                    key("L", 10, width: 48)
-                    if system == .n64 { key("Z", 12, width: 48) }
-                    Spacer()
-                    if system == .n64 {
-                        Button(dpadMode ? "D-PAD" : "STICK") { dpadMode.toggle(); input.clear() }
-                            .font(.caption2.bold()).buttonStyle(.bordered).tint(.white)
+            HStack(alignment: .top) {
+                // Arcade Coin and Start stay on the upper-left edge, never in
+                // the centre of the game. Console Select/Start stay here too.
+                VStack(alignment: .leading, spacing: 6) {
+                    if system != .n64 && (system != .mega || count == 6) {
+                        key(system.isArcade ? "COIN" : (system == .mega ? "MODE" : "SELECT"),
+                            2, width: 64)
                     }
-                    key("R", 11, width: 48)
+                    key(system == .pce || system == .pcecd ? "RUN" : "START", 3, width: 64)
+                }
+                Spacer(minLength: 8)
+                if system == .snes || system == .n64 {
+                    HStack(spacing: 6) {
+                        key("L", 10, width: 45)
+                        if system == .n64 {
+                            key("Z", 12, width: 45)
+                            Button(dpadMode ? "D-PAD" : "STICK") {
+                                onInteraction(); dpadMode.toggle(); input.clear()
+                            }
+                            .font(.caption2.bold()).buttonStyle(.bordered).tint(.white)
+                        }
+                        key("R", 11, width: 45)
+                    }
                 }
             }
             Spacer(minLength: 0)
-            HStack(alignment: .center, spacing: 0) {
+            HStack(alignment: .bottom, spacing: 8) {
                 movement
-                Spacer(minLength: 2)
-                VStack(spacing: 5) {
-                    if system != .n64 && (system != .mega || count == 6) {
-                        key(system.isArcade ? "COIN" : (system == .mega ? "MODE" : "SELECT"), 2, width: middle)
-                    }
-                    key(system == .pce || system == .pcecd ? "RUN" : "START", 3, width: middle)
-                }
-                Spacer(minLength: 2)
+                    .frame(width: padWidth, height: padWidth)
+                Spacer(minLength: 0)
+                // Preserve the native cabinet / console cluster rather than
+                // stacking A/B/C or arcade buttons into a single column.
                 faceButtons
             }
         }
     }
 
     @ViewBuilder private var movement: some View {
-        if system == .n64 && !dpadMode { TouchStick(response: response).frame(width: padWidth, height: padWidth) }
-        else { dpad }
+        if system == .n64 && !dpadMode {
+            TouchStick(response: response, onInteraction: onInteraction)
+        } else {
+            dpad
+        }
     }
+
     private var faceButtons: some View {
         let width = ((face.map(\.column).max() ?? 0) + 1) * step
         let height = ((face.map(\.row).max() ?? 0) + 1) * step
@@ -320,7 +333,12 @@ private struct TouchLayout: View {
         switch system {
         case .nes, .pce, .pcecd: return .red
         case .snes:
-            switch button.label { case "X": return .blue; case "Y": return .green; case "A": return .red; default: return .yellow }
+            switch button.label {
+            case "X": return .blue
+            case "Y": return .green
+            case "A": return .red
+            default: return .yellow
+            }
         case .n64:
             switch button.label { case "A": return .blue; case "B": return .green; default: return .yellow }
         case .arcade, .fbneo: return .orange
@@ -334,52 +352,76 @@ private struct TouchLayout: View {
         switch button.input {
         case .digital(let id):
             down = input.pressed.contains(id)
-            change = { input.setTouch(id, down: $0) }
+            change = { onInteraction(); input.setTouch(id, down: $0) }
         case .cDirection(let id):
             down = input.pressedC.contains(id)
-            change = { input.setTouchC(id, down: $0) }
+            change = { onInteraction(); input.setTouchC(id, down: $0) }
         }
         let tint = colour(button)
-        return Text(button.label).font(.system(size: min(19, step * 0.4), weight: .bold, design: .rounded))
+        return Text(button.label)
+            .font(.system(size: min(19, step * 0.4), weight: .bold, design: .rounded))
             .foregroundStyle(.white)
             .frame(width: max(1, step - 4), height: max(1, step - 4))
             .background {
-                Circle().fill(.black.opacity(0.60))
-                Circle().fill(tint.opacity(down ? 0.95 : 0.43))
+                Circle().fill(.black.opacity(0.5))
+                Circle().fill(tint.opacity(down ? 0.90 : 0.38))
                 Circle().strokeBorder(tint.opacity(0.95), lineWidth: down ? 3 : 1.5)
             }
             .frame(width: step, height: step)
             .overlay { TouchButtonSurface(change: change) }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(system.isArcade ? "Button " + button.label : button.label)
-            .accessibilityAddTraits(.isButton).accessibilityIdentifier("pad-" + button.label)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityIdentifier("pad-" + button.label)
             .onDisappear { change(false) }
     }
+
     private var dpad: some View {
-        let tile = (padWidth - 6) / 3
-        return ZStack {
-            ForEach(4...7, id: \.self) { id in
-                Text(["↑", "↓", "←", "→"][id - 4]).font(.headline).foregroundStyle(.white)
-                    .frame(width: tile, height: tile)
-                    .background(input.pressed.contains(id) ? .orange.opacity(0.8) : .white.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
-                    .offset(x: id == 6 ? -tile-3 : (id == 7 ? tile+3 : 0), y: id == 4 ? -tile-3 : (id == 5 ? tile+3 : 0))
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let centre = width / 2
+            ZStack {
+                Circle().fill(.black.opacity(0.42))
+                Circle().strokeBorder(.white.opacity(0.55), lineWidth: 1.5)
+                ForEach(0..<8, id: \.self) { i in
+                    let angle = Double(i) * .pi / 4 - .pi / 2
+                    let radius = Double(width) * 0.34
+                    Text(["↑","↗","→","↘","↓","↙","←","↖"][i])
+                        .font(.system(size: width * 0.13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .position(x: centre + CGFloat(cos(angle) * radius),
+                                  y: centre + CGFloat(sin(angle) * radius))
+                }
+                Circle().fill(.white.opacity(0.30)).frame(width: width * 0.27)
             }
-        }.frame(width: padWidth, height: padWidth).contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { event in
-                let x = Float(event.location.x * 2 / padWidth - 1)
-                let y = Float(event.location.y * 2 / padWidth - 1)
-                if max(abs(x), abs(y)) <= 1 { input.setTouchDirections(response.touchDirections(x: x, y: y)) }
-                else { input.setTouchDirections([]) }
-            }.onEnded { _ in input.setTouchDirections([]) })
-            .accessibilityElement(children: .ignore).accessibilityLabel("Directional pad")
-            .onDisappear { input.setTouchDirections([]) }
+            .frame(width: width, height: width)
+            .contentShape(Circle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { event in
+                        onInteraction()
+                        let x = Float(event.location.x * 2 / width - 1)
+                        let y = Float(event.location.y * 2 / width - 1)
+                        if max(abs(x), abs(y)) <= 1 {
+                            input.setTouchDirections(response.touchDirections(x: x, y: y))
+                        } else {
+                            input.setTouchDirections([])
+                        }
+                    }
+                    .onEnded { _ in input.setTouchDirections([]); onInteraction() }
+            )
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Eight-way directional joystick")
+        .onDisappear { input.setTouchDirections([]) }
     }
+
     private func key(_ label: String, _ id: Int, width: CGFloat) -> some View {
         Text(label).font(.caption2.bold())
-            .foregroundStyle(.white).frame(width: width, height: min(step, 44))
-            .background(.black.opacity(0.60), in: Capsule())
-            .background(input.pressed.contains(id) ? .orange : .gray, in: Capsule())
-            .overlay { TouchButtonSurface { input.setTouch(id, down: $0) } }
+            .foregroundStyle(.white).frame(width: width, height: min(step, 36))
+            .background(.black.opacity(0.52), in: Capsule())
+            .background(input.pressed.contains(id) ? .orange : .gray.opacity(0.8), in: Capsule())
+            .overlay { TouchButtonSurface { onInteraction(); input.setTouch(id, down: $0) } }
             .accessibilityLabel(label).accessibilityAddTraits(.isButton)
             .onDisappear { input.setTouch(id, down: false) }
     }
@@ -405,6 +447,7 @@ private struct TouchButtonSurface: UIViewRepresentable {
 
 struct TouchStick: View {
     let response: ControlResponse
+    var onInteraction: () -> Void = {}
     @EnvironmentObject private var input: ControllerHub
     @State private var offset = CGSize.zero
     var body: some View {
@@ -416,6 +459,7 @@ struct TouchStick: View {
                 Circle().fill(.white.opacity(0.35)).frame(width: 48,height: 48).offset(offset)
             }.contentShape(Circle())
                 .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                    onInteraction()
                     let dx = value.location.x-radius, dy = value.location.y-radius
                     let distance = sqrt(dx*dx+dy*dy), travel = max(1,radius-24)
                     let scale = max(1,distance/travel)
