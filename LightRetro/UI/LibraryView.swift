@@ -69,12 +69,12 @@ struct LibraryView: View {
                 if wide {
                     HStack(alignment: .top, spacing: 8) {
                         if !expanded && !store.profile.leftHanded { rails(width: geometry.size.width) }
-                        collection(columns: count, results: results, visible: visible)
+                        collection(columns: count, results: results, visible: visible, wide: wide)
                         if !expanded && store.profile.leftHanded { rails(width: geometry.size.width) }
                     }
                 } else {
                     if !expanded { portraitRails }
-                    collection(columns: count, results: results, visible: visible)
+                    collection(columns: count, results: results, visible: visible, wide: wide)
                 }
                 footer
             }.padding(.horizontal, 10).padding(.top, 5).padding(.bottom, 3)
@@ -175,11 +175,11 @@ struct LibraryView: View {
             if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill") } }
         }.font(.system(size: 12)).padding(.horizontal, 8).frame(height: 44).background(palette.tile)
     }
-    private func collection(columns: Int, results: [Game], visible: LibraryPage) -> some View {
+    private func collection(columns: Int, results: [Game], visible: LibraryPage, wide: Bool) -> some View {
         VStack(spacing: 6) {
             HStack {
                 Text("\(results.count) games").font(.system(size: 11))
-                if !(store.profile.showCategoryColumn ?? true) {
+                if wide && !(store.profile.showCategoryColumn ?? true) {
                     searchField.frame(maxWidth: 250)
                 }
                 Spacer(minLength: 3)
