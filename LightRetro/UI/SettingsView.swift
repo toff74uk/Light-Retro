@@ -69,15 +69,32 @@ struct SettingsView: View {
         case .folders: FolderSetupView()
         case .browsing:
             Form {
-                Section("Game tiles") { Toggle("Compact tiles", isOn: profileBinding(\.compactTiles, default: true)) }
+                Section("Game tiles") {
+                    Toggle("Compact tiles", isOn: profileBinding(\.compactTiles, default: true))
+                    Toggle("Show categories column", isOn: profileBinding(\.showCategoryColumn, default: true))
+                    Text("Turn the second column off to give your game tiles more room. Search remains available above the games.").font(.footnote)
+                }
+                Section("System order") {
+                    ForEach(Array(store.profile.orderedPlayableSystems.enumerated()), id: \.element) { index, system in
+                        HStack {
+                            Text(system.title)
+                            Spacer()
+                            Button { store.updateProfile { $0.moveSystem(system, by: -1) } } label: { Image(systemName: "arrow.up.circle") }
+                                .disabled(index == 0).accessibilityLabel("Move \(system.title) up")
+                            Button { store.updateProfile { $0.moveSystem(system, by: 1) } } label: { Image(systemName: "arrow.down.circle") }
+                                .disabled(index == store.profile.orderedPlayableSystems.count - 1)
+                                .accessibilityLabel("Move \(system.title) down")
+                        }.buttonStyle(.borderless)
+                    }
+                }
                 Section("Visible systems") {
-                    ForEach(GameSystem.playable) { system in
+                    ForEach(store.profile.orderedPlayableSystems) { system in
                         Toggle(system.title, isOn: Binding(get: { !(store.profile.hiddenSystems ?? []).contains(system) }, set: { visible in
                             store.updateProfile { profile in var hidden = profile.hiddenSystems ?? []; if visible { hidden.remove(system) } else { hidden.insert(system) }; profile.hiddenSystems = hidden }
                         }))
                     }
                 }
-                Section { Text("Hiding a system keeps its games and saves. SCUMM will be added later.").font(.footnote) }
+                Section { Text("System order and column layout are saved for each profile. Hidden systems keep their games and saves.").font(.footnote) }
             }
         case .artwork:
             Form {
@@ -111,13 +128,7 @@ struct SettingsView: View {
                     Text("During play, L1 + R1 + Start opens the pause menu. Touch remains available in settings forms and Apple’s file picker.").font(.footnote)
                 }
             }
-        case .screensaver:
-            Form {
-                Picker("Start after", selection: profileBinding(\.screensaverMinutes, default: 0)) {
-                    Text("Off").tag(0); Text("2 minutes").tag(2); Text("5 minutes").tag(5); Text("10 minutes").tag(10)
-                }
-                Text("Shows the Light Retro logo and clock while the library is idle. Tap or press a controller button to return. Your iPhone’s Auto-Lock setting still applies.").font(.footnote)
-            }
+        case .screensaver: ScreensaverOptionsView()
         case .updates:
             Form {
                 Text("Updates to this iPhone beta arrive through TestFlight.")
