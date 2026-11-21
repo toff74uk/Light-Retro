@@ -30,7 +30,9 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue(action.isHittable)
         XCTAssertTrue(stick.isHittable)
         let hidden = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            !stick.exists && !action.exists && !app.buttons["Pause game"].exists
+            !stick.exists && !action.exists &&
+            app.buttons["Pause game"].exists &&
+            app.buttons["emulator-setup"].exists
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 8), .completed)
         viewport.coordinate(withNormalizedOffset: centre).tap()
@@ -98,11 +100,11 @@ final class LibraryUITests: XCTestCase {
         let start = app.buttons["START"]
         let setup = app.buttons["emulator-setup"]
         XCTAssertTrue(coin.isHittable && start.isHittable && setup.isHittable)
-        XCTAssertLessThan(coin.frame.midX, start.frame.midX)
+        XCTAssertEqual(coin.frame.midX, start.frame.midX, accuracy: 5)
+        XCTAssertLessThan(coin.frame.midY, start.frame.midY)
         XCTAssertLessThan(start.frame.midX, app.frame.midX)
         XCTAssertGreaterThan(setup.frame.midX, app.frame.midX)
         XCTAssertLessThan(coin.frame.midY, app.frame.height / 3)
-        XCTAssertEqual(coin.frame.midY, setup.frame.midY, accuracy: 5)
     }
 
     func testConsoleSetupReturnsToTheGame() {
@@ -251,14 +253,10 @@ final class LibraryUITests: XCTestCase {
         let fbneo = app.cells.containing(.switch, identifier: "FinalBurn Neo").firstMatch
         XCTAssertTrue(mame.waitForExistence(timeout: 5))
         XCTAssertTrue(fbneo.exists)
-        // Some simulator versions expose the reorder control as its own button.
-        // Otherwise its centre is 32 points inside the trailing edge of the inset cell.
-        let reorder = fbneo.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] 'Reorder'")).firstMatch
-        let centre = CGVector(dx: 0.5, dy: 0.5)
-        let handle = reorder.exists ? reorder.coordinate(withNormalizedOffset: centre) :
-            fbneo.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5)).withOffset(CGVector(dx: -32, dy: 0))
-        let target = mame.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.15)).withOffset(CGVector(dx: -32, dy: 0))
-        handle.press(forDuration: 0.8, thenDragTo: target, withVelocity: .slow, thenHoldForDuration: 0.5)
+        // The explicit arrows work even if iOS hides its drag handles.
+        let moveUp = app.buttons["move-system-up-fbneo"]
+        XCTAssertTrue(moveUp.waitForExistence(timeout: 5))
+        moveUp.tap()
         XCTAssertLessThan(fbneo.frame.midY, mame.frame.midY)
         attach("System-order")
         app.navigationBars.buttons.element(boundBy: 0).tap()

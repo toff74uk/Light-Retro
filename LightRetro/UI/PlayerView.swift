@@ -176,20 +176,28 @@ struct PlayerView: View {
                         }
                     }
                     .ignoresSafeArea()
-                if !session.paused && overlayVisible {
+                if !session.paused {
+                    // Keep Pause and real emulator setup reachable even after
+                    // the five-second idle fade hides the virtual game controls.
                     VStack(spacing: 0) {
                         HStack(spacing: 2) {
-                            if showControls { systemKeys }
-                            Button { input.clear(); session.pause() } label: { Image(systemName: "pause.circle.fill").font(.title).frame(width: 44, height: 44) }.accessibilityLabel("Pause game")
-                            Spacer()
-                            ViewThatFits(in: .horizontal) {
-                                Text(game.displayTitle).font(.caption).lineLimit(1)
-                                Color.clear.frame(width: 0, height: 1)
+                            if overlayVisible && showControls { systemKeys }
+                            Button { input.clear(); session.pause() } label: {
+                                Image(systemName: "pause.circle.fill")
+                                    .font(.title).frame(width: 44, height: 44)
                             }
-                            Spacer()
-                            if activeSystem.isArcade {
-                                if portrait { layoutMenu.labelStyle(.iconOnly).frame(minWidth: 44) }
-                                else { layoutMenu }
+                            .accessibilityLabel("Pause game")
+                            Spacer(minLength: 0)
+                            if overlayVisible {
+                                ViewThatFits(in: .horizontal) {
+                                    Text(game.displayTitle).font(.caption).lineLimit(1)
+                                    Color.clear.frame(width: 0, height: 1)
+                                }
+                                Spacer(minLength: 0)
+                                if activeSystem.isArcade {
+                                    if portrait { layoutMenu.labelStyle(.iconOnly).frame(minWidth: 44) }
+                                    else { layoutMenu }
+                                }
                             }
                             Button {
                                 revealOverlay()
@@ -197,25 +205,32 @@ struct PlayerView: View {
                                 input.clear()
                                 session.engine.clearButtons()
                             } label: {
-                                Image(systemName: "gamecontroller").font(.title2).frame(width: 44, height: 44)
-                            }.accessibilityLabel("Show or hide touch controls")
+                                Image(systemName: "gamecontroller")
+                                    .font(.title2).frame(width: 44, height: 44)
+                            }
+                            .accessibilityLabel("Show or hide touch controls")
                             Button {
                                 input.clear()
                                 revealOverlay()
                                 session.openSetup(for: activeSystem)
                             } label: {
-                                Image(systemName: "gearshape.fill").font(.title2).frame(width: 44, height: 44)
-                            }.accessibilityLabel(activeSystem == .arcade ? "MAME setup" : "Emulator setup")
-                                .accessibilityIdentifier("emulator-setup")
-                        }.foregroundStyle(.white.opacity(0.76)).padding(.horizontal, portrait ? 6 : 12)
+                                Image(systemName: "gearshape.fill")
+                                    .font(.title2).frame(width: 44, height: 44)
+                            }
+                            .accessibilityLabel(activeSystem == .arcade ? "MAME setup" : "Emulator setup")
+                            .accessibilityIdentifier("emulator-setup")
+                        }
+                        .foregroundStyle(.white.opacity(overlayVisible ? 0.85 : 0.62))
+                        .padding(.horizontal, portrait ? 6 : 12)
                         Spacer(minLength: 0)
-                        if showControls {
-                            touchPad.frame(height: min(220, max(0, geometry.size.height - 56)))
+                        if showControls && overlayVisible {
+                            // Controls overlay the full-size game in both orientations.
+                            // Console and game action-button clusters remain unchanged.
+                            touchPad.frame(height: min(220, max(0, geometry.size.height - 100)))
                                 .padding(.horizontal, portrait ? 20 : 14)
                                 .padding(.bottom, portrait ? 0 : 12)
                         }
                     }
-                    .transition(.opacity)
                 }
                 if session.configuring {
                     setupPanel
@@ -250,12 +265,15 @@ struct PlayerView: View {
                 Button("Cancel", role: .cancel) {}
             } message: { Text("Your previous automatic state and in-game battery saves are kept.") }
     }
-    @ViewBuilder private var systemKeys: some View {
-        if activeSystem != .n64 && (activeSystem != .mega || buttons == 6) {
-            let label = activeSystem.isArcade ? "COIN" : (activeSystem == .mega ? "MODE" : "SELECT")
-            SystemKey(label: label, id: 2, width: 52)
+    private var systemKeys: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if activeSystem != .n64 && (activeSystem != .mega || buttons == 6) {
+                let label = activeSystem.isArcade ? "COIN" : (activeSystem == .mega ? "MODE" : "SELECT")
+                SystemKey(label: label, id: 2, width: 52)
+            }
+            SystemKey(label: activeSystem == .pce || activeSystem == .pcecd ? "RUN" : "START", id: 3, width: 52)
         }
-        SystemKey(label: activeSystem == .pce || activeSystem == .pcecd ? "RUN" : "START", id: 3, width: 52)
+        .accessibilityIdentifier("game-system-keys")
     }
 
     private var setupPanel: some View {

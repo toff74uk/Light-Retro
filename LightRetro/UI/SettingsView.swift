@@ -168,7 +168,7 @@ struct SettingsView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                         .allowsHitTesting(false)
                         .accessibilityIdentifier("screensaver-inline-preview")
-                    Button("Preview screensaver full screen") { previewingScreensaver = true }
+                    Button("Preview screensaver") { previewingScreensaver = true }
                         .accessibilityIdentifier("screensaver-preview")
                     Text("The Light Retro logo moves while the exit prompt stays centred at the bottom.").font(.footnote)
                 }

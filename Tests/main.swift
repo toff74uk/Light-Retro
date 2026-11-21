@@ -26,6 +26,18 @@ check(restored.profiles[1].favourites.isEmpty,"Profiles stay isolated")
 check(restored.games[0].id==game.id,"Stable game identity")
 check(restored.profiles[0].orderedSystems == [.n64, .arcade] + GameSystem.playable.filter { $0 != .n64 && $0 != .arcade }, "Restore custom order, skip unavailable and duplicate systems, and append new ones")
 check(restored.profiles[1].orderedSystems == GameSystem.playable, "System order is per player")
+
+var layoutTester = PlayerProfile(name: "Layout tester")
+check(layoutTester.showCategoryColumn == nil, "Legacy profiles use visible category column")
+layoutTester.showCategoryColumn = false
+layoutTester.moveSystem(.n64, offset: -1)
+check(layoutTester.orderedSystems.firstIndex(of: .n64) == GameSystem.playable.firstIndex(of: .n64)! - 1, "Explicit reorder arrow moves system")
+layoutTester.moveSystem(.arcade, offset: -1)
+check(layoutTester.orderedSystems.contains(.arcade), "Cannot move a system out of the list")
+let restoredLayout = try JSONDecoder().decode(PlayerProfile.self, from: JSONEncoder().encode(layoutTester))
+check(restoredLayout.showCategoryColumn == false && restoredLayout.orderedSystems == layoutTester.orderedSystems,
+    "Saved category visibility and order survive a profile reload")
+
 check(GameSystem.arcade.core == "mamearcade", "MAME must use its own engine")
 check(GameSystem.n64.core == "mupen64plus_next", "N64 engine selected")
 check(GameSystem.scumm.core == nil, "SCUMM remains deferred")
