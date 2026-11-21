@@ -171,10 +171,33 @@ struct PlayerProfile: Identifiable, Codable {
     var brightness: Double?
     var darkText: Bool?
     var hiddenSystems: Set<GameSystem>?
+    // Optional so existing libraries and profiles decode unchanged.
+    var systemOrder: [GameSystem]?
+    var showCategoryColumn: Bool?
     var screensaverMinutes: Int?
     var controlResponse: ControlResponse?
     var largeTouchButtons: Bool?
     var arcadeTouchButtons: [String: Int]?
+
+    var orderedPlayableSystems: [GameSystem] {
+        let supported = GameSystem.playable
+        var ordered: [GameSystem] = []
+        for system in systemOrder ?? [] where supported.contains(system) && !ordered.contains(system) {
+            ordered.append(system)
+        }
+        for system in supported where !ordered.contains(system) {
+            ordered.append(system)
+        }
+        return ordered
+    }
+
+    mutating func moveSystem(_ system: GameSystem, by offset: Int) {
+        var ordered = orderedPlayableSystems
+        guard let index = ordered.firstIndex(of: system),
+              ordered.indices.contains(index + offset) else { return }
+        ordered.swapAt(index, index + offset)
+        systemOrder = ordered
+    }
 
     func touchButtonOverride(for game: Game) -> Int? {
         guard game.system.isArcade, let count = arcadeTouchButtons?[game.romStem.lowercased()],
