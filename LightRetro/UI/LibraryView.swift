@@ -155,12 +155,9 @@ struct LibraryView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 5) { ForEach(sections, id: \.0) { item in railButton(item.1, selected: section == item.0, focused: focus == 0) { chooseSection(item.0) }.fixedSize(horizontal: true, vertical: false) } }
             }
-            HStack {
-                searchField
-                if store.profile.showCategoryColumn ?? true {
-                    Picker("Category", selection: $category) { ForEach(categories, id: \.0) { Text($0.1).tag($0.0) } }.tint(palette.text)
-                }
-            }
+            // The horizontally scrolling strip above is the sole system
+            // selector in portrait. A second picker duplicates it on All games.
+            searchField
         }
     }
     private func railButton(_ title: String, selected: Bool, focused: Bool, action: @escaping () -> Void) -> some View {
