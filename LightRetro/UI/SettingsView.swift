@@ -76,7 +76,21 @@ struct SettingsView: View {
             Form {
                 Section("Game tiles") {
                     Toggle("Compact tiles", isOn: profileBinding(\.compactTiles, default: true))
-                    Toggle("Show categories column", isOn: profileBinding(\.showCategoryColumn, default: true))
+                    Button {
+                        store.updateProfile { profile in
+                            profile.showCategoryColumn = !(profile.showCategoryColumn ?? true)
+                        }
+                    } label: {
+                        HStack {
+                            Label("Categories column", systemImage: "rectangle.split.2x1")
+                            Spacer()
+                            Text((store.profile.showCategoryColumn ?? true) ? "Show" : "Hide")
+                                .fontWeight(.semibold)
+                            Image(systemName: (store.profile.showCategoryColumn ?? true) ? "eye" : "eye.slash")
+                        }
+                    }
+                    .accessibilityIdentifier("categories-column-toggle")
+                    .accessibilityLabel((store.profile.showCategoryColumn ?? true) ? "Hide categories" : "Show categories")
                     Text("Turn the second column off for wider game tiles. Search remains available.").font(.footnote)
                 }
                 Section {
@@ -111,20 +125,14 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.borderless)
                     }
-                    .onMove { offsets, destination in
-                        store.updateProfile { profile in
-                            var systems = profile.orderedSystems
-                            systems.move(fromOffsets: offsets, toOffset: destination)
-                            profile.systemOrder = systems.map(\.rawValue)
-                        }
-                    }
+
                 } header: {
                     Text("System order & visibility")
                 } footer: {
-                    Text("Use the arrows or drag handles to change the system order for this player. Hidden systems keep their games and saves.")
+                    Text("Use the up/down arrows to change system order. Hidden systems keep their games and saves.")
                 }
             }
-            .environment(\.editMode, .constant(.active))
+
         case .artwork:
             Form {
                 Section {

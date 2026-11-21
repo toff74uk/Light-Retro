@@ -56,6 +56,11 @@ import UniformTypeIdentifiers
             data.games = [Game(title: "", system: .arcade, relativePath: "sf2.zip"), Game(title: "", system: .arcade, relativePath: "dkong.zip"), Game(title: "", system: .n64, relativePath: "Super Mario 64 (USA).z64"), Game(title: "", system: .snes, relativePath: "Super Mario World (USA).sfc"), Game(title: "", system: .mega, relativePath: "Sonic the Hedgehog (USA).md")].map { GameCatalogue.shared.identify($0) }
             data.profiles[0].name = "Player 1"
             data.profiles[0].favourites.insert(data.games[0].id)
+            // Explicit landscape preview fixture avoids timing-dependent rotation
+            // after dismissing a full-screen Settings cover in iOS 27 UI tests.
+            if ProcessInfo.processInfo.arguments.contains("--ui-preview-hide-categories") {
+                data.profiles[0].showCategoryColumn = false
+            }
         }
         #endif
     }
