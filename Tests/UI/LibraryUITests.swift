@@ -192,6 +192,14 @@ final class LibraryUITests: XCTestCase {
         app.buttons["settings-Profiles"].tap()
         XCTAssertTrue(app.navigationBars["Profiles"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Player 1"].exists)
+        let newName = app.textFields["profile-new-name"]
+        XCTAssertTrue(newName.exists)
+        newName.tap()
+        newName.typeText("Guest")
+        app.buttons["profile-add"].tap()
+        XCTAssertTrue(app.buttons["Guest"].waitForExistence(timeout: 5))
+        app.buttons["Player 1"].tap()
+        XCTAssertTrue(app.buttons["Player 1"].exists)
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.buttons["save-exit"].waitForExistence(timeout: 5))
     }
@@ -264,6 +272,31 @@ final class LibraryUITests: XCTestCase {
         let first = app.buttons["nav-FinalBurn Neo"]
         XCTAssertTrue(first.waitForExistence(timeout: 5))
         XCTAssertLessThan(first.frame.midX, app.buttons["nav-MAME / Arcade"].frame.midX)
+    }
+
+    func testPortraitSystemStripAndOptionalCategories() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-preview"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        let mame = app.buttons.matching(identifier: "nav-MAME / Arcade")
+        XCTAssertTrue(mame.firstMatch.waitForExistence(timeout: 20))
+        XCTAssertEqual(mame.count, 1, "Portrait must not have two system selectors")
+        XCTAssertFalse(app.buttons["Category"].exists)
+        app.buttons["open-settings"].tap()
+        app.buttons["settings-Customise browsing"].tap()
+        let categories = app.switches["Show categories column"]
+        XCTAssertTrue(categories.waitForExistence(timeout: 5))
+        if categories.value as? String == "1" { categories.tap() }
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["save-exit"].tap()
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let noSecondColumn = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.frame.width > app.frame.height &&
+            !app.buttons["nav-All ROMs"].exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [noSecondColumn], timeout: 8), .completed)
+        XCTAssertTrue(app.textFields["Search ROMs"].exists)
     }
 
     private func attach(_ name: String) {
