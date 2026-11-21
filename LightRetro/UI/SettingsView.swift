@@ -314,11 +314,13 @@ private struct AppearanceView: View {
                 Image(systemName: "gearshape")
             }.font(.system(size: 11))
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: compact ? 3 : 2), spacing: 5) {
-                ForEach(Array([GameSystem.arcade, .mega, .n64, .snes, .nes, .fbneo].enumerated()), id: \.offset) { index, system in
+                ForEach(Array(store.data.games.lazy.filter { game in
+                    !(store.profile.hiddenSystems ?? []).contains(game.system) &&
+                    GameCatalogue.shared.isListed(game)
+                }.prefix(6))) { game in
                     VStack(spacing: 3) {
-                        Image("system_\(system.rawValue)")
-                            .resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: compact ? 45 : 62)
-                        Text("Game \(index + 1)")
+                        GameArtwork(game: game).frame(maxWidth: .infinity, maxHeight: compact ? 45 : 62)
+                        Text(game.displayTitle)
                             .font(.system(size: compact ? 8 : 10))
                             .lineLimit(1)
                     }
