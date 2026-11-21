@@ -146,7 +146,12 @@ jobs:
   testflight:
     name: Sign and upload to TestFlight
     needs: package
-    if: github.event_name == 'workflow_dispatch' && inputs.testflight
+    # Release only by manual dispatch, or an explicitly approved merge commit
+    # on protected main. The token is deliberately specific to this release.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.testflight) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+       contains(github.event.head_commit.message, '[testflight-ios27-20261121]'))
     runs-on: xcode-27
     timeout-minutes: 40
     env:

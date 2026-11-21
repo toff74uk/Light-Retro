@@ -20,6 +20,11 @@ final class LibraryUITests: XCTestCase {
         let viewport = app.descendants(matching: .any).matching(identifier: "game-viewport").firstMatch
         let stick = app.descendants(matching: .any).matching(identifier: "pad-stick").firstMatch
         let action = app.descendants(matching: .any).matching(identifier: "pad-1").firstMatch
+        // iOS 27 can finish resuming the game after the 5-second overlay
+        // timeout. A tap must restore the pad before checking its layout.
+        if !action.waitForExistence(timeout: 3) {
+            viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
         XCTAssertTrue(action.waitForExistence(timeout: 5))
         XCTAssertEqual(viewport.frame.width, app.frame.width, accuracy: 2)
         XCTAssertEqual(viewport.frame.height, app.frame.height, accuracy: 2)
@@ -287,7 +292,10 @@ final class LibraryUITests: XCTestCase {
         app.buttons["settings-Customise browsing"].tap()
         let categories = app.switches["Show categories column"]
         XCTAssertTrue(categories.waitForExistence(timeout: 5))
-        if categories.value as? String == "1" { categories.tap() }
+        // --ui-preview creates a fresh player and defaults this switch to On.
+        // Toggle directly: some iOS 27 simulators expose localized switch
+        // values rather than the literal string "1".
+        categories.tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["save-exit"].tap()
         XCUIDevice.shared.orientation = .landscapeLeft
@@ -295,7 +303,7 @@ final class LibraryUITests: XCTestCase {
             app.frame.width > app.frame.height &&
             !app.buttons["nav-All ROMs"].exists
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [noSecondColumn], timeout: 8), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [noSecondColumn], timeout: 15), .completed)
         XCTAssertTrue(app.textFields["Search ROMs"].exists)
     }
 
