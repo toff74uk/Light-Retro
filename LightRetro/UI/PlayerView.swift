@@ -192,7 +192,7 @@ struct PlayerView: View {
                                 .accessibilityIdentifier("game-pause")
                             }
                             .frame(width: 52, alignment: .topLeading)
-                            .accessibilityIdentifier("game-toolbar-left")
+                            .accessibilityElement(children: .contain)
 
                             Spacer(minLength: 0)
                             if overlayVisible {
@@ -239,7 +239,7 @@ struct PlayerView: View {
                                 .accessibilityIdentifier("touch-controls-toggle")
                             }
                             .frame(width: 52, alignment: .topTrailing)
-                            .accessibilityIdentifier("game-toolbar-right")
+                            .accessibilityElement(children: .contain)
                         }
                         .foregroundStyle(.white.opacity(overlayVisible ? 0.85 : 0.62))
                         .padding(.horizontal, portrait ? 6 : 12)
