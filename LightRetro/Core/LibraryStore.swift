@@ -36,8 +36,12 @@ import UniformTypeIdentifiers
                 data = decoded
                 GameCatalogue.shared.updateExistingArcadeRoutes(in: &data)
                 if data.profiles.isEmpty { data.profiles = [PlayerProfile(name: "Player 1")] }
-                for i in data.games.indices where data.games[i].catalogueTitle == nil {
-                    data.games[i] = GameCatalogue.shared.identify(data.games[i])
+                for i in data.games.indices {
+                    if data.games[i].catalogueTitle == nil {
+                        data.games[i] = GameCatalogue.shared.identify(data.games[i])
+                    } else {
+                        data.games[i] = GameCatalogue.repairLegacyArcadeTitle(data.games[i])
+                    }
                 }
             }
         } catch { writable = false; self.error = "Could not read your library. Your files are still in Files → Light Retro. \(error.localizedDescription)" }
