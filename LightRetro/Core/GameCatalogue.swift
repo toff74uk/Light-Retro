@@ -96,7 +96,7 @@ final class GameCatalogue {
         guard game.system.isArcade, let canonical = game.catalogueTitle,
               canonical.contains("/"),
               game.title == LibraryRules.displayName(canonical + ".rom") else { return game }
-        game.title = canonical
+        game.title = displayTitle(canonical: canonical, fileName: game.fileName)
         return game
     }
 
