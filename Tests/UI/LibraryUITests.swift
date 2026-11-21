@@ -292,19 +292,28 @@ final class LibraryUITests: XCTestCase {
         app.buttons["settings-Customise browsing"].tap()
         let categories = app.switches["Show categories column"]
         XCTAssertTrue(categories.waitForExistence(timeout: 5))
-        // --ui-preview creates a fresh player and defaults this switch to On.
-        // Toggle directly: some iOS 27 simulators expose localized switch
-        // values rather than the literal string "1".
+        // The switch starts On in a fresh preview profile. Verify it
+        // actually changes without depending on a localized On/Off value.
+        let initialValue = String(describing: categories.value)
         categories.tap()
+        XCTAssertNotEqual(String(describing: categories.value), initialValue)
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["save-exit"].tap()
+
+        // Verify actual landscape column rendering in a fresh landscape
+        // session; iOS 27 may defer rotation after closing Settings.
+        app.terminate()
         XCUIDevice.shared.orientation = .landscapeLeft
-        let noSecondColumn = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            app.frame.width > app.frame.height &&
-            !app.buttons["nav-All ROMs"].exists
+        app.launchArguments = ["--ui-preview", "--ui-preview-hide-categories"]
+        app.launch()
+        XCTAssertTrue(app.buttons["open-settings"].waitForExistence(timeout: 20))
+        let landscape = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.frame.width > app.frame.height
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [noSecondColumn], timeout: 15), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [landscape], timeout: 15), .completed)
+        XCTAssertFalse(app.buttons["nav-All ROMs"].exists, "The categories column must be hidden")
         XCTAssertTrue(app.textFields["Search ROMs"].exists)
+        attach("Categories-hidden-landscape")
     }
 
     private func attach(_ name: String) {
