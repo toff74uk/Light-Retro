@@ -34,7 +34,7 @@ def verify_bundle(app, signed=False):
     assert len(json.loads((catalogue / 'fbneo-titles.json').read_text())) == 8436, 'Missing Android FBNeo names'
     boards = json.loads((catalogue / 'fbneo-boards.json').read_text())
     assert len(set().union(*boards.values())) == 1839, 'Missing Android FBNeo routing data'
-    assert len(json.loads((catalogue / 'collections.json').read_text())) == 9, 'Missing curated collections'
+    assert len(json.loads((catalogue / 'collections.json').read_text())) == 11, 'Missing arcade, SNES or Mega Drive curated collections'
     assert (app / 'PrivacyInfo.xcprivacy').is_file(), 'Missing privacy manifest'
     assert (app / 'Licenses').is_dir(), 'Missing licences'
     if signed:

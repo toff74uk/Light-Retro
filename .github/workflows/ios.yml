@@ -144,7 +144,12 @@ jobs:
   testflight:
     name: Sign and upload to TestFlight
     needs: package
-    if: github.event_name == 'workflow_dispatch' && inputs.testflight
+    # One-time opt-in release from the trusted main branch only.
+    # PR builds cannot access signing secrets or upload to App Store Connect.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.testflight) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+       contains(github.event.head_commit.message, '[testflight-megadrive-20261121]'))
     runs-on: macos-15-intel
     timeout-minutes: 40
     env:
