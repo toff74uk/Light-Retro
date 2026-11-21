@@ -1,4 +1,5 @@
 #include "../LightRetro/Emulation/FrameAudio.hpp"
+#include "../LightRetro/Emulation/VideoAspect.hpp"
 #include <cassert>
 #include <iostream>
 int main() {
@@ -20,5 +21,26 @@ int main() {
     assert(ring.push(input,2)==0);
     std::vector<float> left(32768),right(32768);ring.pop(left.data(),right.data(),32768);
     assert(ring.push(input,2)==2);ring.pop(l,r,2);assert(r[1]==-.5f);
+    // FBNeo vertical cabinets: the game supplies display aspect 3:4 and
+    // requests 90° rotation of its *landscape* framebuffer. The finished
+    // display must remain 3:4 in either iPhone orientation.
+    using LightRetroVideo::aspectBeforeRotation;
+    using LightRetroVideo::resultingDisplayAspect;
+    auto near = [](double actual, double expected) {
+        return std::fabs(actual - expected) < 0.00001;
+    };
+    assert(near(aspectBeforeRotation("fbneo", 3.0/4.0, 1), 4.0/3.0));
+    assert(near(resultingDisplayAspect("fbneo", 3.0/4.0, 1), 3.0/4.0));
+    assert(near(resultingDisplayAspect("fbneo", 3.0/4.0, 3), 3.0/4.0));
+    assert(near(resultingDisplayAspect("fbneo", 4.0/3.0, 0), 4.0/3.0));
+    // FBNeo vertical-mode rotation settings can intentionally make a game
+    // horizontal; preserve the core's selected display ratio unchanged.
+    assert(near(resultingDisplayAspect("fbneo", 4.0/3.0, 2), 4.0/3.0));
+    assert(near(resultingDisplayAspect("fbneo", 3.0/4.0, 3), 3.0/4.0));
+    // Do not change normal consoles or MAME's independently reported ratios.
+    assert(near(resultingDisplayAspect("mamearcade", 4.0/3.0, 1), 3.0/4.0));
+    assert(near(resultingDisplayAspect("genesis_plus_gx", 4.0/3.0, 0), 4.0/3.0));
+    assert(near(resultingDisplayAspect("fbneo", 0.0, 0), 4.0/3.0));
+    std::cout<<"FBNeo vertical display geometry tests passed\n";
     std::cout<<"Frame conversion and audio ring tests passed\n";
 }
