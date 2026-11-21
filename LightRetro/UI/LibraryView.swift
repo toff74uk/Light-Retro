@@ -22,7 +22,7 @@ struct LibraryView: View {
     private var palette: RetroPalette { RetroPalette(profile: store.profile) }
     private var system: GameSystem? { GameSystem(rawValue: section) }
     private var compact: Bool { store.profile.compactTiles ?? true }
-    private var systems: [GameSystem] { GameSystem.playable.filter { !(store.profile.hiddenSystems ?? []).contains($0) } }
+    private var systems: [GameSystem] { store.profile.orderedPlayableSystems.filter { !(store.profile.hiddenSystems ?? []).contains($0) } }
     private var sections: [(String, String)] { systems.map { ($0.rawValue, $0.title) } + [("all", "All games"), ("favourites", "Favourites"), ("recent", "Recently played"), ("profiles", "Profiles"), ("settings", "Settings")] }
     private var baseGames: [Game] {
         store.data.games.filter { game in
@@ -86,7 +86,7 @@ struct LibraryView: View {
         .sheet(isPresented: $showAdd, onDismiss: installMenuControls) { AddGamesView(initialSystem: system) }
         .sheet(item: $details, onDismiss: installMenuControls) { GameDetailsView(game: $0) }
         .fullScreenCover(isPresented: $showSettings, onDismiss: installMenuControls) { SettingsView() }
-        .fullScreenCover(isPresented: $showPlayers, onDismiss: installMenuControls) { ProfilesView() }
+        .fullScreenCover(isPresented: $showPlayers, onDismiss: installMenuControls) { ProfilesView(standalone: true) }
         .fullScreenCover(item: $playing, onDismiss: installMenuControls) { PlayerView(game: $0) }
         .alert("Light Retro", isPresented: Binding(get: { store.error != nil && !showAdd && !showSettings && details == nil }, set: { if !$0 { store.error = nil } })) {
             Button("OK") { store.error = nil }
@@ -96,7 +96,8 @@ struct LibraryView: View {
         .onChange(of: category) { _ in resetSelection() }
         .onChange(of: search) { _ in resetSelection() }
         .onChange(of: store.data.games) { _ in reconcileSelection() }
-        .onChange(of: store.data.currentProfile) { _ in resetSelection() }
+        .onChange(of: store.data.currentProfile) { _ in category = "all"; focus = 0; resetSelection() }
+        .onChange(of: store.profile.showCategoryColumn) { _ in category = "all"; focus = 0; resetSelection() }
         .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in lastInteraction = Date() })
         .onReceive(clock) { _ in
             let minutes = store.profile.screensaverMinutes ?? 0
@@ -137,14 +138,16 @@ struct LibraryView: View {
                     VStack(spacing: 4) { ForEach(sections, id: \.0) { item in railButton(item.1, selected: section == item.0, focused: focus == 0) { chooseSection(item.0) }.id(item.0) } }
                 }.onChange(of: section) { proxy.scrollTo($0, anchor: .center) }
             }.frame(width: width * 0.16)
-            VStack(spacing: 6) {
-                searchField
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(spacing: 4) { ForEach(categories, id: \.0) { item in railButton(item.1, selected: category == item.0, focused: focus == 1) { category = item.0; focus = 1 }.id(item.0) } }
-                    }.onChange(of: category) { proxy.scrollTo($0, anchor: .center) }
-                }
-            }.frame(width: width * 0.17)
+            if store.profile.showCategoryColumn ?? true {
+                VStack(spacing: 6) {
+                    searchField
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 4) { ForEach(categories, id: \.0) { item in railButton(item.1, selected: category == item.0, focused: focus == 1) { category = item.0; focus = 1 }.id(item.0) } }
+                        }.onChange(of: category) { proxy.scrollTo($0, anchor: .center) }
+                    }
+                }.frame(width: width * 0.17)
+            }
         }
     }
     private var portraitRails: some View {
@@ -154,7 +157,9 @@ struct LibraryView: View {
             }
             HStack {
                 searchField
-                Picker("Category", selection: $category) { ForEach(categories, id: \.0) { Text($0.1).tag($0.0) } }.tint(palette.text)
+                if store.profile.showCategoryColumn ?? true {
+                    Picker("Category", selection: $category) { ForEach(categories, id: \.0) { Text($0.1).tag($0.0) } }.tint(palette.text)
+                }
             }
         }
     }
@@ -177,6 +182,9 @@ struct LibraryView: View {
         VStack(spacing: 6) {
             HStack {
                 Text("\(results.count) games").font(.system(size: 11))
+                if !(store.profile.showCategoryColumn ?? true) {
+                    searchField.frame(maxWidth: 250)
+                }
                 Spacer(minLength: 3)
                 Button { showAdd = true } label: { Label("Add folder", systemImage: "folder.badge.plus") }.accessibilityIdentifier("add-folder")
                 Button { showSettings = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Settings").accessibilityIdentifier("open-settings")
@@ -237,13 +245,7 @@ struct LibraryView: View {
         }.font(.system(size: 9)).opacity(0.85).frame(height: 18)
     }
     private var screensaver: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            VStack(spacing: 30) {
-                Image("Brand").resizable().scaledToFit().frame(width: 240, height: 100)
-                Text(context.date, style: .time).font(.system(size: 48, weight: .light, design: .rounded))
-                Text("Tap or press a button to return").font(.caption)
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).foregroundStyle(.white).background(.black).ignoresSafeArea()
-        }.onTapGesture { asleep = false; lastInteraction = Date() }
+        RetroScreensaver(onExit: { asleep = false; lastInteraction = Date() })
     }
     private func chooseSection(_ value: String) {
         lastInteraction = Date()
@@ -285,7 +287,7 @@ struct LibraryView: View {
                 let items = sections.filter { $0.0 != "settings" && $0.0 != "profiles" }
                 let i = items.firstIndex { $0.0 == section } ?? 0
                 if button == 4 || button == 5 { chooseSection(items[min(items.count - 1, max(0, i + (button == 4 ? -1 : 1)))].0) }
-                if button == 0 || button == 7 { focus = 1 }
+                if button == 0 || button == 7 { focus = (store.profile.showCategoryColumn ?? true) ? 1 : 2 }
             } else if focus == 1 {
                 let i = categories.firstIndex { $0.0 == category } ?? 0
                 if button == 4 || button == 5 { category = categories[min(categories.count - 1, max(0, i + (button == 4 ? -1 : 1)))].0 }
@@ -297,7 +299,7 @@ struct LibraryView: View {
                 let i = list.firstIndex { $0.id == selected } ?? 0
                 if button == 0 { launch(list[i]); return }
                 if button == 2 { details = list[i]; return }
-                if button == 6 && (i % LibraryPage.size) % columns == 0 && !expanded { focus = 1; return }
+                if button == 6 && (i % LibraryPage.size) % columns == 0 && !expanded { focus = (store.profile.showCategoryColumn ?? true) ? 1 : 0; return }
                 let delta = [4: -columns, 5: columns, 6: -1, 7: 1][button] ?? 0
                 let next = min(list.count - 1, max(0, i + delta))
                 selected = list[next].id; page = next / LibraryPage.size
