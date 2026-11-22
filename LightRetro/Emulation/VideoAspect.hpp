@@ -4,21 +4,25 @@
 
 namespace LightRetroVideo {
 
-// FBNeo reports the aspect ratio of the *displayed* arcade monitor. For a
-// vertical cabinet (e.g. 1942: 3:4), it supplies a landscape framebuffer and
-// requests a 90-degree rotation through RETRO_ENVIRONMENT_SET_ROTATION.
+// FBNeo and the pinned MAME libretro core report the aspect ratio of the
+// *displayed* arcade monitor, while independently requesting quarter-turn
+// rotation through RETRO_ENVIRONMENT_SET_ROTATION. For vertical games such as
+// 1942 / Galaga, that final display ratio is typically 3:4.
 //
-// RetroVideoView applies that rotation when laying out the image. It needs
-// the ratio *before* rotation; passing 3:4 straight through would turn it
-// into 4:3, stretching a portrait shooter into a wide image.
+// RetroVideoView's layout expects the *unrotated framebuffer* aspect, then
+// performs the requested rotation itself. Passing 3:4 straight through
+// makes its rotated image 4:3: a portrait shooter becomes stretched wide.
 //
-// Other cores already use the existing frontend geometry convention. Do not
-// alter their ratios, especially MAME and console titles.
+// Both arcade cores therefore need their reported ratio inverted *only* for
+// 90/270-degree rotation. Horizontal, upside-down and unusual native display
+// ratios remain untouched. MAME "Internal" rotation also needs no change
+// because it requests no quarter-turn. Console cores retain their established
+// independent aspect handling.
 inline double aspectBeforeRotation(const std::string &coreName,
                                    double reportedAspect, unsigned rotation) {
     if (!std::isfinite(reportedAspect) || reportedAspect <= 0.0)
         reportedAspect = 4.0 / 3.0;
-    return coreName == "fbneo" && (rotation % 2 != 0)
+    return (coreName == "fbneo" || coreName == "mamearcade") && (rotation % 2 != 0)
         ? 1.0 / reportedAspect : reportedAspect;
 }
 

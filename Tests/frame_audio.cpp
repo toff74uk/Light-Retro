@@ -37,10 +37,23 @@ int main() {
     // horizontal; preserve the core's selected display ratio unchanged.
     assert(near(resultingDisplayAspect("fbneo", 4.0/3.0, 2), 4.0/3.0));
     assert(near(resultingDisplayAspect("fbneo", 3.0/4.0, 3), 3.0/4.0));
-    // Do not change normal consoles or MAME's independently reported ratios.
-    assert(near(resultingDisplayAspect("mamearcade", 4.0/3.0, 1), 3.0/4.0));
+    // Pinned MAME libretro in its default "Libretro" Screen Rotation Mode
+    // reports post-rotation display geometry too. A 3:4 portrait game must
+    // remain 3:4 after the frontend applies its own 90/270-degree rotation.
+    assert(near(aspectBeforeRotation("mamearcade", 3.0/4.0, 1), 4.0/3.0));
+    assert(near(resultingDisplayAspect("mamearcade", 3.0/4.0, 1), 3.0/4.0));
+    assert(near(resultingDisplayAspect("mamearcade", 3.0/4.0, 3), 3.0/4.0));
+    // Do not force horizontal or multi-monitor MAME into 4:3; preserve
+    // the game and core option's actual display aspect.
+    assert(near(resultingDisplayAspect("mamearcade", 4.0/3.0, 0), 4.0/3.0));
+    assert(near(resultingDisplayAspect("mamearcade", 8.0/3.0, 0), 8.0/3.0));
+    assert(near(resultingDisplayAspect("mamearcade", 3.0/4.0, 2), 3.0/4.0));
+    // MAME's "Internal" rotation does not request a Libretro quarter-turn.
+    assert(near(aspectBeforeRotation("mamearcade", 3.0/4.0, 0), 3.0/4.0));
+    // Do not change any console aspect/rotation conventions.
     assert(near(resultingDisplayAspect("genesis_plus_gx", 4.0/3.0, 0), 4.0/3.0));
+    assert(near(resultingDisplayAspect("mupen64plus_next", 4.0/3.0, 1), 3.0/4.0));
     assert(near(resultingDisplayAspect("fbneo", 0.0, 0), 4.0/3.0));
-    std::cout<<"FBNeo vertical display geometry tests passed\n";
+    std::cout<<"MAME and FBNeo vertical display geometry tests passed\n";
     std::cout<<"Frame conversion and audio ring tests passed\n";
 }
