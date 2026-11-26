@@ -216,6 +216,12 @@ struct PlayerView: View {
         guard !session.paused else { return }
         overlayVisible = true
         guard !touching, session.message == nil else { return }
+        #if DEBUG
+        // Geometry checks take multiple accessibility snapshots. Keep controls
+        // present for that fixture; the separate idle test uses the real timer.
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--ui-preview") && arguments.contains("--ui-layout-check") { return }
+        #endif
         pendingHide = Task { @MainActor in
             do { try await Task.sleep(for: .seconds(5)) } catch { return }
             guard !Task.isCancelled else { return }
@@ -239,6 +245,8 @@ struct PlayerView: View {
                 : geometry.size.height
             ZStack {
                 Color.black.ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { revealOverlay() }
                 VStack(spacing: 0) {
                     GameScreen(engine: session.engine)
                         .frame(width: geometry.size.width, height: videoHeight)

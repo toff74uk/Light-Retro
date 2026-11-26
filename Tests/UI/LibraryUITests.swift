@@ -61,7 +61,7 @@ final class LibraryUITests: XCTestCase {
 
     func testArcadeLayoutSwitchInBothOrientations() {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-preview", "--paused-game"]
+        app.launchArguments = ["--ui-preview", "--paused-game", "--ui-layout-check"]
         XCUIDevice.shared.orientation = .landscapeLeft
         app.launch()
         let fighter = app.buttons["game-sf2"]
@@ -136,7 +136,7 @@ final class LibraryUITests: XCTestCase {
 
     func testContinuousMovementAppliesImmediatelyInBothOrientations() {
         let app = XCUIApplication()
-        app.launchArguments = ["--ui-preview", "--paused-game"]
+        app.launchArguments = ["--ui-preview", "--paused-game", "--ui-layout-check"]
         XCUIDevice.shared.orientation = .portrait
         app.launch()
         let fighter = app.buttons["game-sf2"]
