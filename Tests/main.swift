@@ -268,3 +268,25 @@ stored.games += [oldCompanion, consoleDisc]
 catalogue.updateExistingArcadeRoutes(in: &stored)
 check(!catalogue.isListed(stored.games.first { $0.id == oldCompanion.id }!), "Hide a disc that an older mixed scan listed as a game")
 check(catalogue.isListed(stored.games.first { $0.id == consoleDisc.id }!), "Preserve explicit console disc folders")
+
+var movement = FingerMovement()
+check(movement.move(x: 100, y: 100) == (0, 0), "Continuous control begins neutral at any position")
+let movingUp = movement.move(x: 100, y: 90)
+check(ControlResponse.standard.touchDirections(x: movingUp.0, y: movingUp.1) == [4], "Moving up presses up")
+let reversing = movement.move(x: 96, y: 94)
+check(ControlResponse.standard.touchDirections(x: reversing.0, y: reversing.1) == [5, 6],
+      "Reverse down-left immediately while still above the original touch")
+let heldMovement = movement.move(x: 96.2, y: 94.1)
+check(heldMovement == reversing, "Stationary jitter keeps the last intentional direction")
+movement.reset()
+check(movement.direction == (0, 0), "Lifting or cancelling releases the movement")
+check(movement.move(x: 200, y: 300) == (0, 0), "A new finger contact does not inherit the previous movement")
+let horizontalMovement = movement.move(x: 208, y: 300)
+check(ControlResponse.standard.touchDirections(x: horizontalMovement.0, y: horizontalMovement.1) == [7], "Continuous right movement")
+check(movement.move(x: .nan, y: 300) == (0, 0), "Invalid touch data returns to neutral")
+var movementProfile = PlayerProfile(name: "Movement")
+movementProfile.touchJoypadType = .continuous
+let reopenedMovementProfile = try JSONDecoder().decode(PlayerProfile.self, from: JSONEncoder().encode(movementProfile))
+check(reopenedMovementProfile.touchJoypadType == .continuous && migrated.profiles[0].touchJoypadType == nil,
+      "Joypad type persists and old profiles retain the joystick")
+print("Continuous finger movement and preference migration passed")

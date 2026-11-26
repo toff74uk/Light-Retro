@@ -166,6 +166,31 @@ enum ControlResponse: String, CaseIterable, Codable {
     }
 }
 
+enum TouchJoypadType: String, CaseIterable, Codable {
+    case joystick = "Joystick"
+    case continuous = "Continuous finger movement"
+}
+
+// Tracks movement between samples, not displacement from the initial touch.
+// A small accumulated distance filters stationary-finger jitter. Direction
+// stays held until the next intentional movement, or until contact ends.
+struct FingerMovement {
+    private var previous: (Float, Float)?
+    private(set) var direction: (Float, Float) = (0, 0)
+    mutating func move(x: Float, y: Float) -> (Float, Float) {
+        guard x.isFinite && y.isFinite else { reset(); return direction }
+        guard let previous else { self.previous = (x, y); return direction }
+        let dx = x - previous.0, dy = y - previous.1
+        let distance = hypot(dx, dy)
+        if distance >= 2 {
+            direction = (dx / distance, dy / distance)
+            self.previous = (x, y)
+        }
+        return direction
+    }
+    mutating func reset() { previous = nil; direction = (0, 0) }
+}
+
 struct PlayerProfile: Identifiable, Codable {
     var id = UUID()
     var name: String
@@ -186,6 +211,7 @@ struct PlayerProfile: Identifiable, Codable {
     var screensaverMinutes: Int?
     var controlResponse: ControlResponse?
     var largeTouchButtons: Bool?
+    var touchJoypadType: TouchJoypadType?
     var arcadeTouchButtons: [String: Int]?
 
     var orderedSystems: [GameSystem] {

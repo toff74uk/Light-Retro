@@ -27,7 +27,11 @@ final class LibraryUITests: XCTestCase {
         }
         XCTAssertTrue(action.waitForExistence(timeout: 5))
         XCTAssertEqual(viewport.frame.width, app.frame.width, accuracy: 2)
-        XCTAssertEqual(viewport.frame.height, app.frame.height, accuracy: 2)
+        XCTAssertEqual(viewport.frame.minY, app.frame.minY, accuracy: 2)
+        XCTAssertLessThan(viewport.frame.height, app.frame.height - 220)
+        let coin = app.buttons["COIN"]
+        XCTAssertGreaterThanOrEqual(coin.frame.minY, viewport.frame.maxY - 2)
+        XCTAssertGreaterThanOrEqual(stick.frame.minY, coin.frame.maxY - 2)
 
         let centre = CGVector(dx: 0.5, dy: 0.5)
         viewport.coordinate(withNormalizedOffset: centre).tap()
@@ -68,7 +72,7 @@ final class LibraryUITests: XCTestCase {
         let layout = app.descendants(matching: .any).matching(identifier: "arcade-layout").firstMatch
         XCTAssertTrue(layout.waitForExistence(timeout: 8))
         layout.tap()
-        XCTAssertTrue(app.buttons["Automatic (6 buttons)"].exists)
+        XCTAssertTrue(app.buttons["6 buttons"].exists)
         app.buttons["3 buttons"].tap()
         let third = app.descendants(matching: .any).matching(identifier: "pad-3").firstMatch
         let sixth = app.descendants(matching: .any).matching(identifier: "pad-6").firstMatch
@@ -84,7 +88,7 @@ final class LibraryUITests: XCTestCase {
         // A native tap synchronises with the rotation animation. Verify it
         // actually opens the menu and changes the visible gameplay buttons.
         layout.tap()
-        let automatic = app.buttons["Automatic (6 buttons)"]
+        let automatic = app.buttons["6 buttons"]
         XCTAssertTrue(automatic.waitForExistence(timeout: 5))
         automatic.tap()
         XCTAssertTrue(sixth.waitForExistence(timeout: 5))
@@ -113,19 +117,57 @@ final class LibraryUITests: XCTestCase {
         let pause = app.buttons["game-pause"]
         XCTAssertTrue(coin.isHittable && start.isHittable && setup.isHittable)
         XCTAssertTrue(layout.isHittable && toggle.isHittable && pause.isHittable)
-        // Coin, Start and Pause form one vertical left column.
-        XCTAssertEqual(coin.frame.midX, start.frame.midX, accuracy: 5)
-        XCTAssertEqual(pause.frame.midX, start.frame.midX, accuracy: 5)
-        XCTAssertLessThan(coin.frame.midY, start.frame.midY)
-        XCTAssertLessThan(start.frame.midY, pause.frame.midY)
-        XCTAssertLessThan(start.frame.midX, app.frame.midX)
-        // MAME setup, arcade layout and touch visibility descend the right edge.
-        XCTAssertEqual(setup.frame.midX, layout.frame.midX, accuracy: 5)
-        XCTAssertEqual(setup.frame.midX, toggle.frame.midX, accuracy: 5)
-        XCTAssertLessThan(setup.frame.midY, layout.frame.midY)
-        XCTAssertLessThan(layout.frame.midY, toggle.frame.midY)
-        XCTAssertGreaterThan(setup.frame.midX, app.frame.midX)
-        XCTAssertLessThan(coin.frame.midY, app.frame.height / 3)
+        // Coin/Start run horizontally on the left; every utility is on the right.
+        XCTAssertEqual(coin.frame.midY, start.frame.midY, accuracy: 5)
+        XCTAssertLessThan(coin.frame.midX, start.frame.midX)
+        XCTAssertLessThan(start.frame.maxX, layout.frame.minX + 1)
+        XCTAssertLessThan(layout.frame.midX, toggle.frame.midX)
+        XCTAssertLessThan(toggle.frame.midX, pause.frame.midX)
+        XCTAssertLessThan(pause.frame.midX, setup.frame.midX)
+        XCTAssertEqual(layout.frame.midY, setup.frame.midY, accuracy: 5)
+        XCTAssertEqual(pause.frame.midY, setup.frame.midY, accuracy: 5)
+        XCTAssertGreaterThan(pause.frame.midX, app.frame.midX)
+        if app.frame.height > app.frame.width {
+            let video = app.descendants(matching: .any).matching(identifier: "game-viewport").firstMatch
+            XCTAssertEqual(video.frame.minY, app.frame.minY, accuracy: 2)
+            XCTAssertGreaterThanOrEqual(coin.frame.minY, video.frame.maxY - 2)
+        }
+    }
+
+    func testContinuousMovementAppliesImmediatelyInBothOrientations() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-preview", "--paused-game"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        let fighter = app.buttons["game-sf2"]
+        XCTAssertTrue(fighter.waitForExistence(timeout: 20))
+        fighter.tap()
+        app.buttons["play-selected"].tap()
+        app.buttons["Continue playing"].tap()
+        let layout = app.buttons["arcade-layout"]
+        XCTAssertTrue(layout.waitForExistence(timeout: 5))
+        layout.tap()
+        let continuous = app.buttons["Continuous finger movement"]
+        XCTAssertTrue(continuous.waitForExistence(timeout: 5))
+        continuous.tap()
+        let stick = app.descendants(matching: .any).matching(identifier: "pad-stick").firstMatch
+        XCTAssertTrue(stick.waitForExistence(timeout: 5))
+        XCTAssertEqual(stick.label, "Continuous finger movement")
+        XCTAssertGreaterThan(stick.frame.width, 125)
+        // Rotate without reopening the menu: the selected type must carry through.
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let rotated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.frame.width > app.frame.height && stick.isHittable
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [rotated], timeout: 5), .completed)
+        XCTAssertEqual(stick.label, "Continuous finger movement")
+        verifyToolbar(in: app)
+        layout.tap()
+        app.buttons["Joystick"].tap()
+        XCTAssertTrue(stick.waitForExistence(timeout: 5))
+        XCTAssertEqual(stick.label, "Directional joystick")
+        verifyToolbar(in: app)
+        attach("Landscape-new-controls")
     }
 
     func testConsoleSetupReturnsToTheGame() {

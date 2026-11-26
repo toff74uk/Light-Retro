@@ -14,10 +14,12 @@ import GameController
     @Published var fbneoInputs: [Int] = []
     @Published var megaButtons = 6
     @Published var activeSystem: GameSystem?
+    @Published var displayAspect = 4.0 / 3.0
     private var access: GameAccess?
     private var saves: URL?
     func open(_ original: Game, store: LibraryStore, input: ControllerHub, useMAME: Bool = false) {
         guard !loaded else { return }
+        engine.displayAspectChanged = { [weak self] aspect in self?.displayAspect = aspect }
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("--ui-preview") && arguments.contains("--paused-game") { loaded = true; return }
@@ -108,43 +110,112 @@ struct PlayerView: View {
     @State private var overlayVisible = true
     @State private var pendingHide: Task<Void, Never>?
     @State private var dpadMode = false
-    @State private var choosingLayout = false
     @State private var confirmReset = false
     @State private var confirmDiscard = false
     private var activeSystem: GameSystem { session.activeSystem ?? game.system }
     private var automaticButtons: Int {
-        if game.system == .mega { return session.megaButtons }
+        switch activeSystem {
+        case .mega: return session.megaButtons
+        case .nes, .pce, .pcecd: return 2
+        case .snes: return 4
+        case .n64: return 6
+        default: break
+        }
         if activeSystem == .fbneo && !session.fbneoInputs.isEmpty { return min(6, max(2, session.fbneoInputs.count)) }
         return GameCatalogue.shared.arcadeButtonCount(for: game)
     }
     private var buttons: Int { store.profile.touchButtonOverride(for: game) ?? automaticButtons }
-    private var layoutMenu: some View {
-        Button {
-            choosingLayout = true
-        } label: {
-            Label("Layout · \(buttons)", systemImage: "circle.grid.2x2.fill")
-                .font(.subheadline.bold()).fixedSize().frame(minHeight: 38)
-        }.accessibilityLabel("Button layout for this game").accessibilityValue("\(buttons) buttons")
-            .accessibilityIdentifier("arcade-layout")
-            .confirmationDialog("Button layout for this game", isPresented: $choosingLayout) {
-                ForEach([0, 2, 3, 4, 5, 6], id: \.self) { count in
-                    Button(count == 0 ? "Automatic (\(automaticButtons) buttons)" : "\(count) buttons") {
-                        input.clear()
-                        session.engine.clearButtons()
-                        store.updateProfile { $0.setTouchButtonOverride(count == 0 ? nil : count, for: game) }
-                        showControls = true
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            }
+    private func changeControls(_ update: () -> Void) {
+        input.clear()
+        session.engine.clearButtons()
+        update()
+        showControls = true
+        revealOverlay()
     }
+
+    private var layoutMenu: some View {
+        Menu {
+            Picker("Joypad type", selection: Binding(
+                get: { store.profile.touchJoypadType ?? .joystick },
+                set: { value in changeControls { store.updateProfile { $0.touchJoypadType = value } } }
+            )) {
+                ForEach(TouchJoypadType.allCases, id: \.self) { type in
+                    Text(type.rawValue).tag(type)
+                }
+            }.pickerStyle(.inline)
+            if activeSystem.isArcade {
+                Picker("Number of buttons", selection: Binding(
+                    get: { buttons },
+                    set: { count in
+                        changeControls {
+                            store.updateProfile { $0.setTouchButtonOverride(count == automaticButtons ? nil : count, for: game) }
+                        }
+                    }
+                )) {
+                    ForEach(2...6, id: \.self) { count in Text("\(count) buttons").tag(count) }
+                }.pickerStyle(.inline)
+            }
+            if activeSystem == .n64 {
+                Picker("N64 direction control", selection: $dpadMode) {
+                    Text("Analogue stick").tag(false)
+                    Text("D-pad").tag(true)
+                }.pickerStyle(.inline)
+            }
+        } label: {
+            Image(systemName: "circle.grid.2x2.fill")
+                .font(.title2).frame(width: 44, height: 44)
+        }
+        .menuActionDismissBehavior(.enabled)
+        .accessibilityLabel("Button layout for this game")
+        .accessibilityValue("\(buttons) buttons")
+        .accessibilityIdentifier("arcade-layout")
+        .simultaneousGesture(TapGesture().onEnded { revealOverlay() })
+    }
+
+    private var toolbar: some View {
+        HStack(spacing: 0) {
+            if overlayVisible && showControls { systemKeys }
+            Spacer(minLength: 4)
+            HStack(spacing: 0) {
+                layoutMenu
+                Button {
+                    revealOverlay()
+                    showControls.toggle()
+                    input.clear()
+                    session.engine.clearButtons()
+                } label: {
+                    Image(systemName: "gamecontroller").font(.title2).frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Show or hide touch controls")
+                .accessibilityIdentifier("touch-controls-toggle")
+                Button { input.clear(); session.pause() } label: {
+                    Image(systemName: "pause.circle.fill").font(.title2).frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Pause game").accessibilityIdentifier("game-pause")
+                Button {
+                    input.clear()
+                    revealOverlay()
+                    session.openSetup(for: activeSystem)
+                } label: {
+                    Image(systemName: "gearshape.fill").font(.title2).frame(width: 44, height: 44)
+                }
+                .accessibilityLabel(activeSystem == .arcade ? "MAME setup" : "Emulator setup")
+                .accessibilityIdentifier("emulator-setup")
+            }
+            .accessibilityElement(children: .contain)
+        }
+        .foregroundStyle(.white.opacity(overlayVisible ? 0.85 : 0.62))
+        .frame(height: 48)
+        .padding(.horizontal, 6)
+    }
+
     private func revealOverlay() { refreshOverlay(touching: input.touchingControls) }
 
     private func refreshOverlay(touching: Bool) {
         pendingHide?.cancel()
         guard !session.paused else { return }
         overlayVisible = true
-        guard !touching, !choosingLayout, session.message == nil else { return }
+        guard !touching, session.message == nil else { return }
         pendingHide = Task { @MainActor in
             do { try await Task.sleep(for: .seconds(5)) } catch { return }
             guard !Task.isCancelled else { return }
@@ -155,102 +226,53 @@ struct PlayerView: View {
     private var touchPad: some View {
         TouchControls(system: activeSystem, count: buttons, fbneoInputs: session.fbneoInputs,
                       dpadMode: $dpadMode, onModeChange: revealOverlay)
+            .id(store.profile.touchJoypadType ?? .joystick)
     }
 
     var body: some View {
         GeometryReader { geometry in
             let portrait = geometry.size.height > geometry.size.width
+            // Reserve the pad and toolbar even when they fade so the game never jumps.
+            let videoHeight = portrait
+                ? min(geometry.size.width / max(0.1, session.displayAspect),
+                      max(1, geometry.size.height - geometry.safeAreaInsets.bottom - 268))
+                : geometry.size.height
             ZStack {
-                GameScreen(engine: session.engine)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-                    .overlay {
+                Color.black.ignoresSafeArea()
+                VStack(spacing: 0) {
+                    GameScreen(engine: session.engine)
+                        .frame(width: geometry.size.width, height: videoHeight)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                        .overlay {
+                            if !session.paused {
+                                Color.clear.contentShape(Rectangle())
+                                    .onTapGesture { revealOverlay() }
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityLabel("Game screen")
+                                    .accessibilityHint("Tap to show the game controls")
+                                    .accessibilityIdentifier("game-viewport")
+                            }
+                        }
+                    if portrait {
                         if !session.paused {
-                            Color.clear.contentShape(Rectangle())
-                                .onTapGesture { revealOverlay() }
-                                .accessibilityElement(children: .ignore)
-                                .accessibilityLabel("Game screen")
-                                .accessibilityHint("Tap to show the game controls")
-                                .accessibilityIdentifier("game-viewport")
+                            toolbar
+                            if showControls && overlayVisible {
+                                touchPad.frame(height: 212).padding(.horizontal, 12)
+                            }
                         }
+                        Spacer(minLength: 0)
                     }
-                    .ignoresSafeArea()
-                if !session.paused {
-                    // Vertical side stacks leave the centre of the screen unobstructed
-                    // for vertical shooters, in both iPhone orientations.
-                    // Pause and emulator setup remain reachable after touch controls fade.
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                if !portrait && !session.paused {
                     VStack(spacing: 0) {
-                        HStack(alignment: .top, spacing: 3) {
-                            VStack(spacing: 5) {
-                                if overlayVisible && showControls { systemKeys }
-                                Button { input.clear(); session.pause() } label: {
-                                    Image(systemName: "pause.circle.fill")
-                                        .font(.title).frame(width: 44, height: 44)
-                                }
-                                .accessibilityLabel("Pause game")
-                                .accessibilityIdentifier("game-pause")
-                            }
-                            .frame(width: 52, alignment: .topLeading)
-                            .accessibilityElement(children: .contain)
-
-                            Spacer(minLength: 0)
-                            if overlayVisible {
-                                Text(game.displayTitle)
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                    .padding(.top, 8)
-                                    .frame(maxWidth: portrait ? 145 : 270)
-                            }
-                            Spacer(minLength: 0)
-
-                            VStack(spacing: 6) {
-                                Button {
-                                    input.clear()
-                                    revealOverlay()
-                                    session.openSetup(for: activeSystem)
-                                } label: {
-                                    Image(systemName: "gearshape.fill")
-                                        .font(.title2).frame(width: 44, height: 44)
-                                }
-                                .accessibilityLabel(activeSystem == .arcade ? "MAME setup" : "Emulator setup")
-                                .accessibilityIdentifier("emulator-setup")
-
-                                // Always keep the compact toolbar controls within reach.
-                                // Only the virtual game pad, Coin/Start and title fade.
-                                // This also lets people restore the pad without finding a
-                                // hidden toggle in a running game.
-                                if activeSystem.isArcade {
-                                    layoutMenu
-                                        .labelStyle(.iconOnly)
-                                        .frame(width: 44, height: 44)
-                                }
-                                Button {
-                                    revealOverlay()
-                                    showControls.toggle()
-                                    input.clear()
-                                    session.engine.clearButtons()
-                                } label: {
-                                    Image(systemName: "gamecontroller")
-                                        .font(.title2).frame(width: 44, height: 44)
-                                }
-                                .accessibilityLabel("Show or hide touch controls")
-                                .accessibilityIdentifier("touch-controls-toggle")
-                            }
-                            .frame(width: 52, alignment: .topTrailing)
-                            .accessibilityElement(children: .contain)
-                        }
-                        .foregroundStyle(.white.opacity(overlayVisible ? 0.85 : 0.62))
-                        .padding(.horizontal, portrait ? 6 : 12)
-
+                        toolbar.padding(.horizontal, max(6, geometry.safeAreaInsets.leading))
                         Spacer(minLength: 0)
                         if showControls && overlayVisible {
-                            // The game occupies its full viewport; joystick and
-                            // console-specific button clusters overlay its lower edge.
-                            touchPad.frame(height: min(220, max(0, geometry.size.height - 100)))
-                                .padding(.horizontal, portrait ? 20 : 14)
-                                .padding(.bottom, portrait ? 0 : 12)
+                            touchPad.frame(height: min(220, max(0, geometry.size.height - 64)))
+                                .padding(.horizontal, max(14, geometry.safeAreaInsets.leading))
+                                .padding(.bottom, max(12, geometry.safeAreaInsets.bottom))
                         }
                     }
                 }
@@ -262,10 +284,10 @@ struct PlayerView: View {
                 }
             }
             .onChange(of: portrait) { _ in revealOverlay() }
-        }.statusBarHidden()
+        }.ignoresSafeArea().statusBarHidden()
             .onAppear { showControls = input.names.isEmpty; session.open(game, store: store, input: input) }
+            .onChange(of: dpadMode) { _ in input.clear(); session.engine.clearButtons(); revealOverlay() }
             .onChange(of: session.paused) { _ in revealOverlay() }
-            .onChange(of: choosingLayout) { _ in revealOverlay() }
             .onChange(of: session.message) { _ in revealOverlay() }
             .onReceive(input.$touchingControls.dropFirst()) { held in refreshOverlay(touching: held) }
             .onDisappear {
@@ -288,7 +310,7 @@ struct PlayerView: View {
             } message: { Text("Your previous automatic state and in-game battery saves are kept.") }
     }
     private var systemKeys: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        HStack(spacing: 2) {
             if activeSystem != .n64 && (activeSystem != .mega || buttons == 6) {
                 let label = activeSystem.isArcade ? "COIN" : (activeSystem == .mega ? "MODE" : "SELECT")
                 SystemKey(label: label, id: 2, width: 52)
@@ -367,7 +389,7 @@ struct PlayerView: View {
                         Picker("Save slot", selection: $session.slot) { ForEach(1...3, id: \.self) { Text("Slot \($0)").tag($0) } }.pickerStyle(.segmented)
                         HStack { Button("Save state") { session.saveSlot() }; Spacer(); Button("Load state") { session.loadSlot() } }.buttonStyle(.bordered)
                         Toggle("Touch controls", isOn: $showControls)
-                        if game.system.isArcade { layoutMenu }
+                        layoutMenu
                         ControlOptions()
                         Button("Restart game") { confirmReset = true }
                     }.padding(4)
@@ -406,16 +428,18 @@ private struct TouchControls: View {
         GeometryReader { area in
             let width = area.size.width
             let height = min(220, area.size.height)
-            let pad = min(138, width * 0.32, height * 0.72)
-            let spacingBudget = min(62, max(44, width * 0.14))
+            let pad = min(158, width * 0.36, height * 0.82)
+            let spacingBudget: CGFloat = 8
             let columns = (face.map(\.column).max() ?? 0) + 1
             let rows = (face.map(\.row).max() ?? 0) + 1
             let shoulders = system == .snes || system == .n64
-            let step = min(store.profile.largeTouchButtons == true ? 60 : 50,
+            let step = min(store.profile.largeTouchButtons == true ? 66 : 58,
                            (width - pad - spacingBudget - 10) / columns,
                            (height - (shoulders ? 48 : 0)) / rows)
             TouchLayout(system: system, face: face, step: max(1, step), padWidth: pad,
-                        response: store.profile.controlResponse ?? .standard, dpadMode: $dpadMode, onModeChange: onModeChange)
+                        response: store.profile.controlResponse ?? .standard,
+                        joypadType: store.profile.touchJoypadType ?? .joystick,
+                        dpadMode: $dpadMode, onModeChange: onModeChange)
                 .frame(maxHeight: height).frame(maxHeight: .infinity, alignment: .bottom)
         }
     }
@@ -427,6 +451,7 @@ private struct TouchLayout: View {
     let step: CGFloat
     let padWidth: CGFloat
     let response: ControlResponse
+    let joypadType: TouchJoypadType
     @Binding var dpadMode: Bool
     let onModeChange: () -> Void
     private var stickMode: TouchStickMode {
@@ -451,7 +476,7 @@ private struct TouchLayout: View {
             }
             Spacer(minLength: 0)
             HStack(alignment: .center, spacing: 0) {
-                TouchStick(response: response, mode: stickMode)
+                TouchStick(response: response, mode: stickMode, joypadType: joypadType)
                     .frame(width: padWidth, height: padWidth)
                 Spacer(minLength: 2)
                 faceButtons
@@ -584,8 +609,10 @@ private struct TouchButtonSurface: UIViewRepresentable {
 struct TouchStick: View {
     let response: ControlResponse
     let mode: TouchStickMode
+    var joypadType: TouchJoypadType = .joystick
     @EnvironmentObject private var input: ControllerHub
     @State private var offset = CGSize.zero
+    @State private var movement = FingerMovement()
     @GestureState private var stickDown = false
     var body: some View {
         GeometryReader { proxy in
@@ -593,30 +620,39 @@ struct TouchStick: View {
             ZStack {
                 Circle().fill(.white.opacity(0.10))
                 Circle().strokeBorder(.white.opacity(0.25),lineWidth: 1)
-                Circle().fill(.white.opacity(0.35)).frame(width: 48,height: 48).offset(offset)
-            }.opacity(0.76).contentShape(Circle())
+                Circle().fill(.white.opacity(0.35)).frame(width: 56,height: 56).offset(offset)
+            }.opacity(0.76).contentShape(Rectangle())
                 .gesture(DragGesture(minimumDistance: 0)
                     .updating($stickDown) { _, down, _ in down = true }
                     .onChanged { value in
                         input.setStickContact(true)
+                        if joypadType == .continuous {
+                            let direction = movement.move(x: Float(value.location.x), y: Float(value.location.y))
+                            offset = CGSize(width: CGFloat(direction.0) * radius * 0.55,
+                                            height: CGFloat(direction.1) * radius * 0.55)
+                            input.moveTouchStick(x: direction.0, y: direction.1, mode: mode, response: response)
+                            return
+                        }
                         let dx = value.location.x-radius, dy = value.location.y-radius
-                        let distance = sqrt(dx*dx+dy*dy), travel = max(1,radius-24)
+                        let distance = sqrt(dx*dx+dy*dy), travel = max(1,radius-28)
                         let scale = max(1,distance/travel)
                         offset = CGSize(width: dx/scale,height: dy/scale)
                         input.moveTouchStick(x: Float(offset.width / travel), y: Float(offset.height / travel),
                                              mode: mode, response: response)
                     }.onEnded { _ in centre() })
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(mode == .analogue ? "N64 analogue stick" : "Directional joystick")
+                .accessibilityLabel(joypadType == .continuous ? "Continuous finger movement" : (mode == .analogue ? "N64 analogue stick" : "Directional joystick"))
                 .accessibilityIdentifier("pad-stick")
                 .onChange(of: stickDown) { down in if !down { centre() } }
                 .onChange(of: mode) { _ in centre() }
+                .onChange(of: joypadType) { _ in centre() }
                 .onDisappear { centre() }
         }
     }
 
     private func centre() {
         offset = .zero
+        movement.reset()
         input.setStickContact(false)
         input.moveTouchStick(x: 0, y: 0, mode: mode, response: response)
     }
