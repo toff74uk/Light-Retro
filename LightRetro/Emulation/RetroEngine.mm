@@ -66,7 +66,7 @@ static __weak RetroEngine* frontend=nil;
     AVAudioEngine *_audioEngine;
     AVAudioSourceNode *_audioSource;
     RetroVideoView *_videoView;
-    double _lastTime, _accumulator;
+    double _lastTime, _accumulator, _lastDisplayAspect;
     BOOL _running;
 }
 - (void)render:(const void*)data width:(unsigned)width height:(unsigned)height pitch:(size_t)pitch;
@@ -252,6 +252,11 @@ static NSString* optionString(const std::string& text) {
     const double framebufferAspect=LightRetroVideo::aspectBeforeRotation(
         _core->name, _core->aspect, _core->rotation);
     [_videoView setAspect:framebufferAspect rotation:_core->rotation];
+    const double displayAspect=(_core->rotation%2)?1.0/framebufferAspect:framebufferAspect;
+    if (displayAspect>0 && std::isfinite(displayAspect) && displayAspect!=_lastDisplayAspect) {
+        _lastDisplayAspect=displayAspect;
+        if (self.displayAspectChanged) self.displayAspectChanged(displayAspect);
+    }
 }
 - (void)applyAVInfo:(const retro_system_av_info*)av {
     if(!_core) return;
