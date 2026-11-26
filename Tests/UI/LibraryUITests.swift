@@ -284,10 +284,22 @@ final class LibraryUITests: XCTestCase {
         XCTAssertTrue((preview.value as? String)?.contains("Light blue") == true)
         attach("Appearance-landscape")
         XCUIDevice.shared.orientation = .portrait
+        // Rotation rebuilds the adaptive preview's accessibility element.
+        // Wait for orientation first, then resolve fresh elements. Snapshot
+        // queries on this runner can each take several seconds; do not put
+        // multiple queries inside a five-second polling predicate.
         let portrait = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            app.frame.height > app.frame.width && swatch.isHittable && swatch.frame.maxX < preview.frame.minX
+            app.frame.height > app.frame.width
         }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [portrait], timeout: 5), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [portrait], timeout: 15), .completed)
+        let portraitPreview = app.descendants(matching: .any)
+            .matching(identifier: "appearance-preview").firstMatch
+        let portraitSwatch = app.buttons["Light blue"]
+        XCTAssertTrue(portraitPreview.waitForExistence(timeout: 15))
+        XCTAssertTrue(portraitSwatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(portraitSwatch.isHittable)
+        XCTAssertLessThan(portraitSwatch.frame.maxX, portraitPreview.frame.minX)
+        XCTAssertTrue((portraitPreview.value as? String)?.contains("Light blue") == true)
         attach("Appearance-portrait")
         XCTAssertFalse(app.buttons["Preview screensaver"].exists)
         app.navigationBars.buttons.element(boundBy: 0).tap()
